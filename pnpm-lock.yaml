@@ -89,6 +89,19 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/typescript-config
 
+  contexts/@projects/application:
+    dependencies:
+      '@projects/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../packages/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../packages/typescript-config
+
   contexts/@projects/domain:
     dependencies:
       '@effect/schema':
