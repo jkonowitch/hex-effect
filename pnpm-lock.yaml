@@ -78,6 +78,9 @@ importers:
       '@effect/schema':
         specifier: ^0.68.17
         version: 0.68.17(effect@3.4.7)
+      effect:
+        specifier: ^3.4.7
+        version: 3.4.7
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -91,6 +94,9 @@ importers:
       '@effect/schema':
         specifier: ^0.68.17
         version: 0.68.17(effect@3.4.7)
+      effect:
+        specifier: ^3.4.7
+        version: 3.4.7
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*

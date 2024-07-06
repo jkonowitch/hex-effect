@@ -13,6 +13,7 @@
     "@repo/typescript-config": "workspace:*"
   },
   "dependencies": {
-    "@effect/schema": "^0.68.17"
+    "@effect/schema": "^0.68.17",
+    "effect": "^3.4.7"
   }
 }
