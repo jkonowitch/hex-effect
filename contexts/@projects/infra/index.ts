@@ -94,6 +94,10 @@ const UnitOfWorkLive = Layer.effect(
   })
 );
 
+const InfrastructureLive = Layer.merge(UnitOfWorkLive, DatabaseLive).pipe(
+  Layer.provide(SqliteClientLive)
+);
+
 /**
  * Application and Domain Service Implementations
  */
@@ -183,3 +187,11 @@ const TaskRepositoryLive = Layer.effect(
 const ProjectDomainPublisherLive = Layer.succeed(ProjectDomainPublisher, {
   publish: () => Effect.void
 });
+
+const DomainServiceLive = Layer.mergeAll(
+  TaskRepositoryLive,
+  ProjectRepositoryLive,
+  ProjectDomainPublisherLive
+);
+
+export const ApplicationLive = Layer.provide(DomainServiceLive, InfrastructureLive);
