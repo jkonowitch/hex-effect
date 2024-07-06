@@ -9,6 +9,7 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "better-sqlite3": "^11.1.2",
     "@types/node": "^20.14.10",
     "dotenv-cli": "^7.4.2",
     "kysely-codegen": "^0.15.0",
@@ -17,7 +18,7 @@
   "dependencies": {
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
-    "better-sqlite3": "^11.1.2",
+    "@types/better-sqlite3": "^7.6.11",
     "effect": "^3.4.7",
     "kysely": "^0.27.4"
   },
