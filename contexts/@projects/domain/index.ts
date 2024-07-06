@@ -1,13 +1,13 @@
 import { Schema } from "@effect/schema";
 
-const ProjectId = Schema.Number.pipe(Schema.int(), Schema.brand("UserId"))
+const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"))
 
 export class Project extends Schema.TaggedClass<Project>()("Project", {
   id: ProjectId,
   title: Schema.String
 }) { }
 
-const TaskId = Schema.Number.pipe(Schema.int(), Schema.brand('TaskId'))
+const TaskId = Schema.String.pipe(Schema.brand('TaskId'))
 
 export class Task extends Schema.TaggedClass<Task>()("Task", {
   projectId: ProjectId,

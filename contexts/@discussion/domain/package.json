@@ -1,0 +1,13 @@
+{
+  "name": "@discussion/domain",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {},
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "dependencies": {
+    "@effect/schema": "^0.68.17"
+  }
+}
