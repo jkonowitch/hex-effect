@@ -11,5 +11,6 @@
     "@effect/schema": "^0.68.17",
     "@projects/domain": "workspace:*",
     "effect": "^3.4.7"
-  }
+  },
+  "type": "module"
 }
