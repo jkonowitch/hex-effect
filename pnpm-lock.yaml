@@ -126,6 +126,9 @@ importers:
 
   contexts/@projects/infra:
     dependencies:
+      '@effect/schema':
+        specifier: ^0.68.17
+        version: 0.68.17(effect@3.4.7)
       '@projects/application':
         specifier: workspace:*
         version: link:../application
