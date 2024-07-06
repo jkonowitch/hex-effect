@@ -8,7 +8,6 @@
     "@repo/typescript-config": "workspace:*"
   },
   "dependencies": {
-    "@effect/rpc": "^0.31.20",
     "@effect/schema": "^0.68.17",
     "@projects/domain": "workspace:*",
     "effect": "^3.4.7"
