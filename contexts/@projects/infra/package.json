@@ -5,10 +5,15 @@
   "scripts": {},
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*"
+    "@repo/typescript-config": "workspace:*",
+    "kysely-codegen": "^0.15.0",
+    "kysely-ctl": "^0.8.9"
   },
   "dependencies": {
     "@projects/application": "workspace:*",
-    "@projects/domain": "workspace:*"
+    "@projects/domain": "workspace:*",
+    "better-sqlite3": "^11.1.2",
+    "effect": "^3.4.7",
+    "kysely": "^0.27.4"
   }
 }
