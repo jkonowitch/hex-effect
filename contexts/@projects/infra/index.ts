@@ -6,6 +6,7 @@ import { Kysely, CompiledQuery, SqliteDialect } from 'kysely';
 import type { DB } from './persistence/schema.js';
 import {
   Project,
+  ProjectDomainPublisher,
   ProjectId,
   ProjectRepository,
   Task,
@@ -178,3 +179,7 @@ const TaskRepositoryLive = Layer.effect(
     };
   })
 );
+
+const ProjectDomainPublisherLive = Layer.succeed(ProjectDomainPublisher, {
+  publish: () => Effect.void
+});
