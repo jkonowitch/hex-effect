@@ -13,6 +13,7 @@ import {
   TaskRepository
 } from '@projects/domain';
 import { Schema } from '@effect/schema';
+import { nanoid } from 'nanoid';
 
 /**
  * Infrastructure Services
@@ -104,7 +105,7 @@ const ProjectRepositoryLive = Layer.effect(
 
     return {
       nextId() {
-        return Effect.succeed(ProjectId.make(''));
+        return Effect.succeed(ProjectId.make(nanoid()));
       },
       save: (project) =>
         Effect.gen(function* () {
@@ -148,7 +149,7 @@ const TaskRepositoryLive = Layer.effect(
 
     return {
       nextId() {
-        return Effect.succeed(TaskId.make(''));
+        return Effect.succeed(TaskId.make(nanoid()));
       },
       save: (task) =>
         Effect.gen(function* () {
