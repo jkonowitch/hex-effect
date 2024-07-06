@@ -109,7 +109,7 @@ const ProjectRepositoryLive = Layer.effect(
       },
       save: (project) =>
         Effect.gen(function* () {
-          const decoded = yield* Schema.encode(Project)(project);
+          const decoded = yield* Schema.encode(Project)(project).pipe(Effect.orDie);
           yield* uow.write(
             db.direct
               .insertInto('projects')
@@ -119,14 +119,16 @@ const ProjectRepositoryLive = Layer.effect(
         }),
       findById: (id) =>
         Effect.gen(function* () {
-          const record = yield* db.call((db) =>
-            db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
-          );
+          const record = yield* db
+            .call((db) =>
+              db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
+            )
+            .pipe(Effect.orDie);
           return yield* Schema.decode(Project)({
             id: record.id,
             title: record.title,
             _tag: 'Project'
-          });
+          }).pipe(Effect.orDie);
         })
     };
   })
@@ -153,19 +155,23 @@ const TaskRepositoryLive = Layer.effect(
       },
       save: (task) =>
         Effect.gen(function* () {
-          const encoded = yield* Schema.encode(RefinedTask)(task);
-          yield* uow.write(db.direct.insertInto('tasks').values(encoded).compile());
+          const encoded = yield* Schema.encode(RefinedTask)(task).pipe(Effect.orDie);
+          yield* uow
+            .write(db.direct.insertInto('tasks').values(encoded).compile())
+            .pipe(Effect.orDie);
         }),
       findById: (id) =>
         Effect.gen(function* () {
-          const record = yield* db.call((db) =>
-            db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
-          );
+          const record = yield* db
+            .call((db) =>
+              db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
+            )
+            .pipe(Effect.orDie);
 
           const decoded = yield* Schema.decode(RefinedTask)({
             ...record,
             _tag: 'Task'
-          });
+          }).pipe(Effect.orDie);
 
           return new Task(decoded);
         })
