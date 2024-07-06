@@ -139,6 +139,10 @@ const ProjectRepositoryLive = Layer.effect(
   })
 );
 
+/**
+ * Sqlite does not have a bool type, so we will encode to 0 / 1
+ */
+
 const RefinedTask = Schema.Struct({
   ...Task.fields,
   completed: Schema.transform(Schema.Int, Schema.Boolean, {
@@ -161,9 +165,7 @@ const TaskRepositoryLive = Layer.effect(
       save: (task) =>
         Effect.gen(function* () {
           const encoded = yield* Schema.encode(RefinedTask)(task).pipe(Effect.orDie);
-          yield* uow
-            .write(db.direct.insertInto('tasks').values(encoded).compile())
-            .pipe(Effect.orDie);
+          yield* uow.write(db.direct.insertInto('tasks').values(encoded).compile());
         }),
       findById: (id) =>
         Effect.gen(function* () {
