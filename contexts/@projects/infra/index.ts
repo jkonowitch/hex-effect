@@ -15,6 +15,7 @@ import {
 } from '@projects/domain';
 import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
+import { CreateProject, createProject } from '@projects/application';
 
 /**
  * Infrastructure Services
@@ -196,4 +197,15 @@ const DomainServiceLive = Layer.mergeAll(
   ProjectDomainPublisherLive
 );
 
-export const ApplicationLive = Layer.provide(DomainServiceLive, InfrastructureLive);
+export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
+
+async function test() {
+  const res = await Effect.zipLeft(
+    createProject(CreateProject.make({ title: 'HELLO' })),
+    Effect.serviceFunctions(UnitOfWork).commit()
+  ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
+
+  console.log(res);
+}
+
+// test();
