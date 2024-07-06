@@ -5,7 +5,7 @@ import { Context, Effect } from "effect";
  * Model
  */
 
-const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"))
+export const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"))
 
 export class Project extends Schema.TaggedClass<Project>()("Project", {
   id: ProjectId,
@@ -24,7 +24,7 @@ export class Project extends Schema.TaggedClass<Project>()("Project", {
   }
 }
 
-const TaskId = Schema.String.pipe(Schema.brand('TaskId'))
+export const TaskId = Schema.String.pipe(Schema.brand('TaskId'))
 
 export class Task extends Schema.TaggedClass<Task>()("Task", {
   projectId: ProjectId,

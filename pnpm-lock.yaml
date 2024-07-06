@@ -91,9 +91,18 @@ importers:
 
   contexts/@projects/application:
     dependencies:
+      '@effect/rpc':
+        specifier: ^0.31.20
+        version: 0.31.20(@effect/platform@0.58.20(@effect/schema@0.68.17(effect@3.4.7))(effect@3.4.7))(@effect/schema@0.68.17(effect@3.4.7))(effect@3.4.7)
+      '@effect/schema':
+        specifier: ^0.68.17
+        version: 0.68.17(effect@3.4.7)
       '@projects/domain':
         specifier: workspace:*
         version: link:../domain
+      effect:
+        specifier: ^3.4.7
+        version: 3.4.7
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -168,6 +177,19 @@ packages:
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
     engines: {node: '>=6.0.0'}
+
+  '@effect/platform@0.58.20':
+    resolution: {integrity: sha512-IQRKDyveB4wFDV8Q/hw9+U5ixPxS4248hZfw/np+PviZfR1s5WEqrPxm4f+gj2+Le8BRxgwhD0waqhs23WwNYQ==}
+    peerDependencies:
+      '@effect/schema': ^0.68.17
+      effect: ^3.4.7
+
+  '@effect/rpc@0.31.20':
+    resolution: {integrity: sha512-btKpPqbOB1h5brXr5hwVaxUtNzNa86zc+gXbUReUSS9nM1Fk9Qd+H0FOWCrRM/aI/GnKdJ932wQD8YusWKORXg==}
+    peerDependencies:
+      '@effect/platform': ^0.58.20
+      '@effect/schema': ^0.68.17
+      effect: ^3.4.7
 
   '@effect/schema@0.68.17':
     resolution: {integrity: sha512-Zal7iaTjDT6/oo2F4xfhIKCyFxODRNnTGv/h/y0s+sDOCfpKU3QU7hZO1ZhRauiHJkIiNMNXUC63B2nTUOXtOQ==}
@@ -823,6 +845,9 @@ packages:
     resolution: {integrity: sha512-CO2JX/8/PT9bDGO1iXa5h5ey1skaKI1dvecERyhH4pp3PGjwd3KIjMAXEg79Ps9nclsdt4oPbfqiAnLU0EwrAQ==}
     engines: {node: '>=8.0.0'}
 
+  fast-decode-uri-component@1.0.1:
+    resolution: {integrity: sha512-WKgKWg5eUxvRZGwW8FvfbaH7AXSh2cL+3j5fMGzUMCxWBJ3dV3a7Wz8y2f/uQ0e3B6WmodD3oS54jTQ9HVTIIg==}
+
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
@@ -836,6 +861,9 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
 
+  fast-querystring@1.1.2:
+    resolution: {integrity: sha512-g6KuKWmFXc0fID8WWH0jit4g0AGBoJhCkJMb1RmbsSEUNvQ+ZC8D6CUZ+GtF8nMzSPXnhiePyyqqipzNNEnHjg==}
+
   fastq@1.17.1:
     resolution: {integrity: sha512-sRVD3lWVIXWg6By68ZN7vho9a1pQcN/WBFaAAsDDFzlJjvoGx0P8z7V1t72grFJfJhu3YPZBuu25f7Kaw2jN1w==}
 
@@ -846,6 +874,9 @@ packages:
   fill-range@7.0.1:
     resolution: {integrity: sha512-qOo9F+dMUmC2Lcb4BbVvnKJxTPjCm+RRpe4gDuGrzkL7mEVl/djYSu2OdQ2Pa302N4oqkSg9ir6jaLWJ2USVpQ==}
     engines: {node: '>=8'}
+
+  find-my-way-ts@0.1.4:
+    resolution: {integrity: sha512-naNl2YZ8m9LlYtPZathQBjXQQ8069uYBFq8We6w9AEGddJErVh0JZw8jd/C/2W9Ib3BjTnu+YN0/rR+ytWxNdw==}
 
   find-up@5.0.0:
     resolution: {integrity: sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==}
@@ -1080,6 +1111,9 @@ packages:
   ms@2.1.2:
     resolution: {integrity: sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==}
 
+  multipasta@0.2.2:
+    resolution: {integrity: sha512-KKGdmXIJUmt9BV45LsbUdMnju8eCNSyF9KpbyqK2E3wQXjpPQOg52/Hc+nsmBacmEkNxLVT5h1y3ZgEXB4prXg==}
+
   nanoid@3.3.7:
     resolution: {integrity: sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -1122,6 +1156,9 @@ packages:
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
+
+  path-browserify@1.0.1:
+    resolution: {integrity: sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g==}
 
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
@@ -1601,6 +1638,20 @@ snapshots:
     dependencies:
       '@jridgewell/gen-mapping': 0.3.5
       '@jridgewell/trace-mapping': 0.3.25
+
+  '@effect/platform@0.58.20(@effect/schema@0.68.17(effect@3.4.7))(effect@3.4.7)':
+    dependencies:
+      '@effect/schema': 0.68.17(effect@3.4.7)
+      effect: 3.4.7
+      find-my-way-ts: 0.1.4
+      multipasta: 0.2.2
+      path-browserify: 1.0.1
+
+  '@effect/rpc@0.31.20(@effect/platform@0.58.20(@effect/schema@0.68.17(effect@3.4.7))(effect@3.4.7))(@effect/schema@0.68.17(effect@3.4.7))(effect@3.4.7)':
+    dependencies:
+      '@effect/platform': 0.58.20(@effect/schema@0.68.17(effect@3.4.7))(effect@3.4.7)
+      '@effect/schema': 0.68.17(effect@3.4.7)
+      effect: 3.4.7
 
   '@effect/schema@0.68.17(effect@3.4.7)':
     dependencies:
@@ -2275,6 +2326,8 @@ snapshots:
     dependencies:
       pure-rand: 6.1.0
 
+  fast-decode-uri-component@1.0.1: {}
+
   fast-deep-equal@3.1.3: {}
 
   fast-glob@3.3.2:
@@ -2289,6 +2342,10 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
+  fast-querystring@1.1.2:
+    dependencies:
+      fast-decode-uri-component: 1.0.1
+
   fastq@1.17.1:
     dependencies:
       reusify: 1.0.4
@@ -2300,6 +2357,10 @@ snapshots:
   fill-range@7.0.1:
     dependencies:
       to-regex-range: 5.0.1
+
+  find-my-way-ts@0.1.4:
+    dependencies:
+      fast-querystring: 1.1.2
 
   find-up@5.0.0:
     dependencies:
@@ -2504,6 +2565,8 @@ snapshots:
 
   ms@2.1.2: {}
 
+  multipasta@0.2.2: {}
+
   nanoid@3.3.7: {}
 
   natural-compare@1.4.0: {}
@@ -2546,6 +2609,8 @@ snapshots:
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
+
+  path-browserify@1.0.1: {}
 
   path-exists@4.0.0: {}
 
