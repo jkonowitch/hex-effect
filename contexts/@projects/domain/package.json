@@ -11,5 +11,8 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*"
+  },
+  "dependencies": {
+    "@effect/schema": "^0.68.17"
   }
 }
