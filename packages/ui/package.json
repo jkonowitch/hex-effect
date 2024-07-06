@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
     "svelte": "^4.2.12"
   }
 }

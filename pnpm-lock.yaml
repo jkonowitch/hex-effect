@@ -146,11 +146,16 @@ importers:
         specifier: ^2.35.1
         version: 2.35.1(eslint@8.57.0)(svelte@4.2.12)
 
+  packages/typescript-config: {}
+
   packages/ui:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
       svelte:
         specifier: ^4.2.12
         version: 4.2.12
