@@ -1,8 +1,8 @@
 import { defineConfig } from 'kysely-ctl';
-import SQLite from 'better-sqlite3';
-import { SqliteDialect } from 'kysely';
+import { Database as SQLite } from 'bun:sqlite';
+import { BunSqliteDialect } from 'kysely-bun-sqlite';
 
-const dialect = new SqliteDialect({
+const dialect = new BunSqliteDialect({
   database: new SQLite(process.env.PROJECT_DB)
 });
 

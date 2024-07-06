@@ -1,8 +1,8 @@
-import type { Database as SqliteDB } from 'better-sqlite3';
-import SQLite from 'better-sqlite3';
+import { Database as SQLite } from 'bun:sqlite';
+import { BunSqliteDialect } from 'kysely-bun-sqlite';
 import { Data, Effect, Context, Layer, Ref, Config } from 'effect';
 import type { UnknownException } from 'effect/Cause';
-import { Kysely, CompiledQuery, SqliteDialect } from 'kysely';
+import { Kysely, CompiledQuery } from 'kysely';
 import type { DB } from './persistence/schema.js';
 import {
   Project,
@@ -33,10 +33,7 @@ export class Database extends Context.Tag('KyselyEffect')<
   }
 >() {}
 
-export class SqliteClient extends Context.Tag('SqliteClient')<
-  SqliteClient,
-  { client: SqliteDB }
->() {}
+export class SqliteClient extends Context.Tag('SqliteClient')<SqliteClient, { client: SQLite }>() {}
 
 export class UnitOfWork extends Context.Tag('UnitOfWork')<
   UnitOfWork,
@@ -51,7 +48,7 @@ const DatabaseLive = Layer.effect(
   Effect.gen(function* () {
     const sqlite = yield* SqliteClient;
     const kyselyClient = new Kysely<DB>({
-      dialect: new SqliteDialect({ database: sqlite.client })
+      dialect: new BunSqliteDialect({ database: sqlite.client })
     });
     return {
       direct: kyselyClient,
@@ -207,5 +204,3 @@ async function test() {
 
   console.log(res);
 }
-
-// test();

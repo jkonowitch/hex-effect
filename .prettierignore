@@ -9,6 +9,7 @@ node_modules
 vite.config.js*
 
 # Ignore files for PNPM, NPM and YARN
+bun.lockb
 pnpm-lock.yaml
 pnpm-workspace.yaml
 package-lock.json
