@@ -1,0 +1,14 @@
+{
+  "name": "@projects/infra",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {},
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "dependencies": {
+    "@projects/application": "workspace:*",
+    "@projects/domain": "workspace:*"
+  }
+}

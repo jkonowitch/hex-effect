@@ -124,6 +124,22 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/typescript-config
 
+  contexts/@projects/infra:
+    dependencies:
+      '@projects/application':
+        specifier: workspace:*
+        version: link:../application
+      '@projects/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../packages/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../packages/typescript-config
+
   packages/config-eslint:
     dependencies:
       '@typescript-eslint/eslint-plugin':
