@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "kysely": "dotenv -e .env.local -- kysely"
+    "kysely": "dotenv -e .env.local -- kysely",
+    "generate-types": "dotenv -e .env.local -- kysely-codegen --out-file persistence/schema.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
