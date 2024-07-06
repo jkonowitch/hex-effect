@@ -1,0 +1,10 @@
+{
+  "name": "@repo/template",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {},
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*"
+  }
+}
