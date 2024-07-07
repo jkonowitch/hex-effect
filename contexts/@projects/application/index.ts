@@ -7,7 +7,7 @@ import {
   TaskId,
   TaskRepository
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe } from 'effect';
+import { Effect, type Request, Option, pipe, Context } from 'effect';
 
 /**
  * Requests
@@ -44,6 +44,14 @@ export class CompleteTask extends Schema.TaggedRequest<CompleteTask>()(
  * Application Services
  */
 
+export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
+  TransactionalBoundary,
+  {
+    begin(): Effect.Effect<void>;
+    commit(): Effect.Effect<void>;
+  }
+>() {}
+
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
   Request.Request.Success<A>,
   Request.Request.Error<A>,
@@ -55,7 +63,7 @@ export const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary) satisfies RequestHandler<CreateProject>;
 
 export const addTask = ({ description, projectId }: AddTask) =>
   Effect.gen(function* () {
@@ -66,7 +74,7 @@ export const addTask = ({ description, projectId }: AddTask) =>
     const task = yield* project.addTask(description);
     yield* Effect.serviceFunctions(TaskRepository).save(task);
     return task.id;
-  }) satisfies RequestHandler<AddTask>;
+  }).pipe(withTransactionalBoundary) satisfies RequestHandler<AddTask>;
 
 export const completeTask = ({ taskId }: CompleteTask) =>
   Effect.gen(function* () {
@@ -76,8 +84,9 @@ export const completeTask = ({ taskId }: CompleteTask) =>
       succeedOrNotFound(`No task ${taskId}`),
       Effect.flatMap(Task.complete)
     );
-    repo.save(task);
-  }) satisfies RequestHandler<CompleteTask>;
+    yield* Effect.log('modified task', task);
+    yield* repo.save(task);
+  }).pipe(withTransactionalBoundary) satisfies RequestHandler<CompleteTask>;
 
 /**
  * Utils
@@ -93,4 +102,16 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
         })
       )
     );
+}
+
+function withTransactionalBoundary<A, E, R>(
+  eff: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R | TransactionalBoundary> {
+  return Effect.gen(function* () {
+    const tx = yield* TransactionalBoundary;
+    yield* tx.begin();
+    const result = yield* eff;
+    yield* tx.commit();
+    return result;
+  });
 }
