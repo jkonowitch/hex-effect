@@ -112,11 +112,12 @@ const ProjectRepositoryLive = Layer.effect(
       },
       save: (project) =>
         Effect.gen(function* () {
-          const decoded = yield* Schema.encode(Project)(project).pipe(Effect.orDie);
+          const encoded = Schema.encodeSync(Project)(project);
+
           yield* uow.write(
             db.direct
               .insertInto('projects')
-              .values({ id: decoded.id, title: decoded.title })
+              .values({ id: encoded.id, title: encoded.title })
               .onConflict((oc) => oc.doUpdateSet((eb) => ({ title: eb.ref('excluded.title') })))
               .compile()
           );
@@ -129,13 +130,13 @@ const ProjectRepositoryLive = Layer.effect(
             )
             .pipe(Effect.orDie, Effect.map(Option.fromNullable));
 
-          if (Option.isNone(record)) return yield* Effect.succeed(Option.none<Project>());
+          if (Option.isNone(record)) return Option.none<Project>();
 
-          const project = yield* Schema.decode(Project)({
+          const project = Schema.decodeSync(Project)({
             id: record.value.id,
             title: record.value.title,
             _tag: 'Project'
-          }).pipe(Effect.orDie);
+          });
 
           return Option.some(project);
         })
@@ -168,7 +169,7 @@ const TaskRepositoryLive = Layer.effect(
       },
       save: (task) =>
         Effect.gen(function* () {
-          const encoded = yield* Schema.encode(RefinedTask)(task).pipe(Effect.orDie);
+          const encoded = Schema.encodeSync(RefinedTask)(task);
           yield* uow.write(
             db.direct
               .insertInto('tasks')
@@ -190,12 +191,13 @@ const TaskRepositoryLive = Layer.effect(
             )
             .pipe(Effect.orDie, Effect.map(Option.fromNullable));
 
-          if (Option.isNone(record)) return yield* Effect.succeed(Option.none<Task>());
+          if (Option.isNone(record)) return Option.none<Task>();
 
-          const decoded = yield* Schema.decode(RefinedTask)({
+          const decoded = Schema.decodeSync(RefinedTask)({
             ...record.value,
             _tag: 'Task'
-          }).pipe(Effect.orDie);
+          });
+
           return Option.some(new Task(decoded));
         })
     };
