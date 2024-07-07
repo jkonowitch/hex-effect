@@ -19,7 +19,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.42.1",
-		"@sveltejs/adapter-auto": "^3.1.1",
+		"svelte-adapter-bun": "~0.5.2",
 		"@sveltejs/kit": "^2.5.2",
 		"@sveltejs/vite-plugin-svelte": "^3.0.2",
 		"@typescript-eslint/eslint-plugin": "^7.1.0",
