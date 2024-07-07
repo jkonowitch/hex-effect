@@ -1,6 +1,6 @@
 import { Database as SQLite } from 'bun:sqlite';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
-import { Data, Effect, Context, Layer, Ref, Config } from 'effect';
+import { Data, Effect, Context, Layer, Ref, Config, Option } from 'effect';
 import type { UnknownException } from 'effect/Cause';
 import { Kysely, CompiledQuery } from 'kysely';
 import type { DB } from './persistence/schema.js';
@@ -131,7 +131,7 @@ const ProjectRepositoryLive = Layer.effect(
             id: record.id,
             title: record.title,
             _tag: 'Project'
-          }).pipe(Effect.orDie);
+          }).pipe(Effect.orDie, Effect.map(Option.some));
         })
     };
   })
@@ -178,7 +178,7 @@ const TaskRepositoryLive = Layer.effect(
             _tag: 'Task'
           }).pipe(Effect.orDie);
 
-          return new Task(decoded);
+          return Option.some(new Task(decoded));
         })
     };
   })
