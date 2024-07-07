@@ -15,7 +15,7 @@ import {
 } from '@projects/domain';
 import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
-import { CreateProject, createProject } from '@projects/application';
+import { omit } from 'effect/Struct';
 
 /**
  * Infrastructure Services
@@ -117,6 +117,7 @@ const ProjectRepositoryLive = Layer.effect(
             db.direct
               .insertInto('projects')
               .values({ id: decoded.id, title: decoded.title })
+              .onConflict((oc) => oc.doUpdateSet((eb) => ({ title: eb.ref('excluded.title') })))
               .compile()
           );
         }),
@@ -163,7 +164,18 @@ const TaskRepositoryLive = Layer.effect(
       save: (task) =>
         Effect.gen(function* () {
           const encoded = yield* Schema.encode(RefinedTask)(task).pipe(Effect.orDie);
-          yield* uow.write(db.direct.insertInto('tasks').values(encoded).compile());
+          yield* uow.write(
+            db.direct
+              .insertInto('tasks')
+              .values(omit(encoded, '_tag'))
+              .onConflict((oc) =>
+                oc.doUpdateSet((eb) => ({
+                  completed: eb.ref('excluded.completed'),
+                  description: eb.ref('excluded.description')
+                }))
+              )
+              .compile()
+          );
         }),
       findById: (id) =>
         Effect.gen(function* () {
