@@ -125,14 +125,19 @@ const ProjectRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const record = yield* db
             .call((db) =>
-              db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
+              db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirst()
             )
-            .pipe(Effect.orDie);
-          return yield* Schema.decode(Project)({
-            id: record.id,
-            title: record.title,
+            .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+
+          if (Option.isNone(record)) return yield* Effect.succeed(Option.none<Project>());
+
+          const project = yield* Schema.decode(Project)({
+            id: record.value.id,
+            title: record.value.title,
             _tag: 'Project'
-          }).pipe(Effect.orDie, Effect.map(Option.some));
+          }).pipe(Effect.orDie);
+
+          return Option.some(project);
         })
     };
   })
@@ -181,15 +186,16 @@ const TaskRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const record = yield* db
             .call((db) =>
-              db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirstOrThrow()
+              db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirst()
             )
-            .pipe(Effect.orDie);
+            .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+
+          if (Option.isNone(record)) return yield* Effect.succeed(Option.none<Task>());
 
           const decoded = yield* Schema.decode(RefinedTask)({
-            ...record,
+            ...record.value,
             _tag: 'Task'
           }).pipe(Effect.orDie);
-
           return Option.some(new Task(decoded));
         })
     };
