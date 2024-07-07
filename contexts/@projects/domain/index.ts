@@ -1,5 +1,6 @@
 import { Schema } from '@effect/schema';
 import { Context, Effect } from 'effect';
+import type { Option } from 'effect/Option';
 
 /**
  * Model
@@ -80,7 +81,7 @@ export class ProjectRepository extends Context.Tag('ProjectRepository')<
   ProjectRepository,
   {
     save(project: Project): Effect.Effect<void>;
-    findById(id: typeof ProjectId.Type): Effect.Effect<Project>;
+    findById(id: typeof ProjectId.Type): Effect.Effect<Option<Project>>;
     nextId(): Effect.Effect<typeof ProjectId.Type>;
   }
 >() {}
@@ -89,7 +90,7 @@ export class TaskRepository extends Context.Tag('TaskRepository')<
   TaskRepository,
   {
     save(task: Task): Effect.Effect<void>;
-    findById(id: typeof TaskId.Type): Effect.Effect<Task>;
+    findById(id: typeof TaskId.Type): Effect.Effect<Option<Task>>;
     nextId(): Effect.Effect<typeof TaskId.Type>;
   }
 >() {}
