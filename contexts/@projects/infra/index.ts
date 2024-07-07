@@ -196,6 +196,7 @@ const DomainServiceLive = Layer.mergeAll(
 
 export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function test() {
   const res = await Effect.zipLeft(
     createProject(CreateProject.make({ title: 'HELLO' })),
