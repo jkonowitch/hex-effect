@@ -1,7 +1,7 @@
-import { Database as SQLite } from 'bun:sqlite';
+import { Database as SQLite, SQLiteError } from 'bun:sqlite';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
-import { Data, Effect, Context, Layer, Ref, Config, Option } from 'effect';
-import type { UnknownException } from 'effect/Cause';
+import { Effect, Context, Layer, Ref, Config, Option } from 'effect';
+import { UnknownException } from 'effect/Cause';
 import { Kysely, CompiledQuery } from 'kysely';
 import type { DB } from './persistence/schema.js';
 import {
@@ -21,15 +21,13 @@ import { CreateProject, createProject } from '@projects/application';
  * Infrastructure Services
  */
 
-export class KyselyError extends Data.TaggedError('KyselyError')<{
-  readonly error: unknown;
-}> {}
-
 export class Database extends Context.Tag('KyselyEffect')<
   Database,
   {
     direct: Kysely<DB>;
-    call: <A>(f: (db: Kysely<DB>) => Promise<A>) => Effect.Effect<A, KyselyError>;
+    call: <A>(
+      f: (db: Kysely<DB>) => Promise<A>
+    ) => Effect.Effect<A, SQLiteError | UnknownException>;
   }
 >() {}
 
@@ -39,7 +37,7 @@ export class UnitOfWork extends Context.Tag('UnitOfWork')<
   UnitOfWork,
   {
     readonly write: (op: CompiledQuery) => Effect.Effect<void>;
-    readonly commit: () => Effect.Effect<void, KyselyError | UnknownException, Database>;
+    readonly commit: () => Effect.Effect<void, SQLiteError | UnknownException, Database>;
   }
 >() {}
 
@@ -55,7 +53,9 @@ const DatabaseLive = Layer.effect(
       call: <A>(f: (db: Kysely<DB>) => Promise<A>) =>
         Effect.tryPromise({
           try: () => f(kyselyClient),
-          catch: (error) => new KyselyError({ error })
+          catch: (error) => {
+            return error instanceof SQLiteError ? error : new UnknownException(error);
+          }
         })
     };
   })
