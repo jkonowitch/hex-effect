@@ -109,7 +109,7 @@ function withTransactionalBoundary<A, E, R>(
 ): Effect.Effect<A, E, R | TransactionalBoundary> {
   return Effect.gen(function* () {
     const tx = yield* TransactionalBoundary;
-    yield* tx.begin();
+    // yield* tx.begin();
     const result = yield* eff;
     yield* tx.commit();
     return result;
