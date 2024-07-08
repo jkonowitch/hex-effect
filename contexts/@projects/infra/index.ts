@@ -79,7 +79,7 @@ const TransactionalBoundaryLive = Layer.effect(
   })
 );
 
-const UnitOfWorkLive = (client: SQLite) =>
+const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type']> =>
   Effect.gen(function* () {
     const units = yield* Ref.make<ReadonlyArray<CompiledQuery>>([]);
     const kyselyClient = new Kysely<DB>({
