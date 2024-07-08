@@ -68,8 +68,8 @@ const TransactionalBoundaryLive = Layer.effect(
       commit: () =>
         Effect.gen(function* () {
           yield* Effect.log('commit called');
-
           const uow = yield* assertUnitOfWork;
+          // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
           yield* uow.commit().pipe(Effect.orDie);
         })
     };
