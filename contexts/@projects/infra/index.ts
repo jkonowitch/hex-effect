@@ -20,6 +20,7 @@ import {
   AddTask,
   CompleteTask,
   CreateProject,
+  GetProjectWithTasks,
   router,
   TransactionalBoundary
 } from '@projects/application';
@@ -222,6 +223,20 @@ const TaskRepositoryLive = Layer.succeed(TaskRepository, {
       });
 
       return Option.some(new Task(decoded));
+    }),
+  findAllByProjectId: (projectId) =>
+    Effect.gen(function* () {
+      const uow = yield* assertUnitOfWork;
+
+      const records = yield* uow.session
+        .call((db) =>
+          db.selectFrom('tasks').selectAll().where('projectId', '=', projectId).execute()
+        )
+        .pipe(Effect.orDie);
+
+      return Option.some(
+        records.map((v) => Schema.decodeSync(RefinedTask)({ ...v, _tag: 'Task' }))
+      );
     })
 });
 
@@ -269,4 +284,13 @@ async function execCompleteTask(taskId: Task['id']) {
   console.log(res);
 }
 
-await execCompleteTask(TaskId.make('wrX10xgdNV0VHAGJ5jmKx'));
+// await execCompleteTask(TaskId.make('wrX10xgdNV0VHAGJ5jmKx'));
+
+async function execGetAllProjectsAndTasks() {
+  const res = await handler(
+    GetProjectWithTasks.make({ projectId: ProjectId.make('5shj6M008O2Z0TlUVt8f0') })
+  ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
+
+  console.log(res);
+}
+await execGetAllProjectsAndTasks();
