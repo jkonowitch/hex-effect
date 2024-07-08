@@ -1,6 +1,6 @@
 import { Database as SQLite, SQLiteError } from 'bun:sqlite';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
-import { Effect, Context, Layer, Ref, Config, Option, FiberRef } from 'effect';
+import { Effect, Context, Layer, Ref, Config, Option, FiberRef, Scope } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { Kysely, CompiledQuery } from 'kysely';
 import type { DB } from './persistence/schema.js';
@@ -63,10 +63,9 @@ const TransactionalBoundaryLive = Layer.effect(
         Effect.gen(function* () {
           yield* Effect.log('begin called');
           const uow = yield* UnitOfWorkLive(sqlite.client);
-
-          yield* FiberRef.getAndUpdate(FiberRef.currentContext, (ctx) =>
-            Context.add(ctx, UnitOfWork, uow)
-          );
+          const scope = yield* Scope.Scope;
+          yield* Scope.addFinalizer(scope, Effect.log('closed scope!'));
+          yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(UnitOfWork, uow));
         }),
       commit: () =>
         Effect.gen(function* () {

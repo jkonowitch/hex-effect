@@ -7,7 +7,7 @@ import {
   TaskId,
   TaskRepository
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Context } from 'effect';
+import { Effect, type Request, Option, pipe, Context, Scope } from 'effect';
 
 /**
  * Requests
@@ -47,8 +47,8 @@ export class CompleteTask extends Schema.TaggedRequest<CompleteTask>()(
 export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   TransactionalBoundary,
   {
-    begin(): Effect.Effect<void>;
-    commit(): Effect.Effect<void>;
+    begin(): Effect.Effect<void, never, Scope.Scope>;
+    commit(): Effect.Effect<void, never, Scope.Scope>;
   }
 >() {}
 
@@ -109,9 +109,9 @@ function withTransactionalBoundary<A, E, R>(
 ): Effect.Effect<A, E, R | TransactionalBoundary> {
   return Effect.gen(function* () {
     const tx = yield* TransactionalBoundary;
-    // yield* tx.begin();
+    yield* tx.begin();
     const result = yield* eff;
     yield* tx.commit();
     return result;
-  });
+  }).pipe(Effect.scoped);
 }
