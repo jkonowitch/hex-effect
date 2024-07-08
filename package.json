@@ -18,5 +18,5 @@
     "contexts/**",
     "apps/*"
   ],
-  "name": "with-svelte"
+  "name": "hex-effect"
 }
