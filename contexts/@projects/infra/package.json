@@ -13,10 +13,10 @@
     "kysely-ctl": "^0.8.9"
   },
   "dependencies": {
-    "@effect/schema": "^0.68.17",
+    "@effect/schema": "^0.68.18",
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
-    "effect": "^3.4.7",
+    "effect": "^3.4.8",
     "kysely": "^0.27.4",
     "kysely-bun-sqlite": "^0.3.2",
     "nanoid": "^5.0.7"
