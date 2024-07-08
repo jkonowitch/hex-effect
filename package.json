@@ -1,17 +1,15 @@
 {
   "private": true,
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "format": "prettier --write .",
-    "gen": "turbo gen workspace --copy @repo/template --type package"
+    "build": "bun --filter '*' build",
+    "dev": "bun --filter '*' dev",
+    "lint": "bun --filter '*' lint",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "prettier": "^3.2.5",
     "prettier-plugin-svelte": "^3.2.2",
     "@types/bun": "~1.1.6",
-    "turbo": "^2.0.6",
     "eslint": "^8.57.0"
   },
   "packageManager": "bun@1.0.18",
