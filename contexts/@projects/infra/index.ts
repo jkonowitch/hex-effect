@@ -17,14 +17,13 @@ import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import {
-  addTask,
   AddTask,
-  completeTask,
   CompleteTask,
   CreateProject,
-  createProject,
+  router,
   TransactionalBoundary
 } from '@projects/application';
+import { Router } from '@effect/rpc';
 
 /**
  * Infrastructure Services
@@ -240,8 +239,10 @@ export const ApplicationLive = Layer.provideMerge(DomainServiceLive, Infrastruct
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
+const handler = Router.toHandlerUndecoded(router);
+
 async function execCreateProject() {
-  const res = await createProject(CreateProject.make({ title: 'HELLO' })).pipe(
+  const res = await handler(CreateProject.make({ title: 'HELLO' })).pipe(
     Effect.provide(ApplicationLive),
     Effect.runPromise
   );
@@ -249,7 +250,7 @@ async function execCreateProject() {
   console.log(res);
 }
 async function execAddTask(projectId: Project['id']) {
-  const res = await addTask(AddTask.make({ projectId, description: 'kralf' })).pipe(
+  const res = await handler(AddTask.make({ projectId, description: 'kralf' })).pipe(
     Effect.provide(ApplicationLive),
     Effect.runPromise
   );
@@ -257,10 +258,10 @@ async function execAddTask(projectId: Project['id']) {
   console.log(res);
 }
 
-await execAddTask(ProjectId.make('5shj6M008O2Z0TlUVt8f0'));
+// await execAddTask(ProjectId.make('5shj6M008O2Z0TlUVt8f0'));
 
 async function execCompleteTask(taskId: Task['id']) {
-  const res = await completeTask(CompleteTask.make({ taskId })).pipe(
+  const res = await handler(CompleteTask.make({ taskId })).pipe(
     Effect.provide(ApplicationLive),
     Effect.runPromise
   );
@@ -268,4 +269,4 @@ async function execCompleteTask(taskId: Task['id']) {
   console.log(res);
 }
 
-// await execCompleteTask(TaskId.make('wOER4QC8coMDk1FJYpeGV'));
+await execCompleteTask(TaskId.make('wrX10xgdNV0VHAGJ5jmKx'));

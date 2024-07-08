@@ -13,6 +13,7 @@
     "kysely-ctl": "^0.8.9"
   },
   "dependencies": {
+    "@effect/rpc": "^0.31.21",
     "@effect/schema": "^0.68.18",
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",

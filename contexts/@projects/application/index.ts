@@ -1,3 +1,4 @@
+import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import {
   Project,
@@ -58,14 +59,14 @@ type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect
   unknown
 >;
 
-export const createProject = ({ title }: CreateProject) =>
+const createProject = ({ title }: CreateProject) =>
   Effect.gen(function* () {
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
   }).pipe(withTransactionalBoundary) satisfies RequestHandler<CreateProject>;
 
-export const addTask = ({ description, projectId }: AddTask) =>
+const addTask = ({ description, projectId }: AddTask) =>
   Effect.gen(function* () {
     const project = yield* pipe(
       Effect.serviceFunctions(ProjectRepository).findById(projectId),
@@ -76,7 +77,7 @@ export const addTask = ({ description, projectId }: AddTask) =>
     return task.id;
   }).pipe(withTransactionalBoundary) satisfies RequestHandler<AddTask>;
 
-export const completeTask = ({ taskId }: CompleteTask) =>
+const completeTask = ({ taskId }: CompleteTask) =>
   Effect.gen(function* () {
     const repo = yield* TaskRepository;
     const task = yield* pipe(
@@ -87,6 +88,12 @@ export const completeTask = ({ taskId }: CompleteTask) =>
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
   }).pipe(withTransactionalBoundary) satisfies RequestHandler<CompleteTask>;
+
+export const router = Router.make(
+  Rpc.effect(CreateProject, createProject),
+  Rpc.effect(AddTask, addTask),
+  Rpc.effect(CompleteTask, completeTask)
+);
 
 /**
  * Utils
