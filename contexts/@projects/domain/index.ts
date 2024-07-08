@@ -91,6 +91,7 @@ export class TaskRepository extends Context.Tag('TaskRepository')<
   {
     save(task: Task): Effect.Effect<void>;
     findById(id: typeof TaskId.Type): Effect.Effect<Option<Task>>;
+    findAllByProjectId(id: typeof ProjectId.Type): Effect.Effect<Option<Task[]>>;
     nextId(): Effect.Effect<typeof TaskId.Type>;
   }
 >() {}

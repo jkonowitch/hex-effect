@@ -41,6 +41,20 @@ export class CompleteTask extends Schema.TaggedRequest<CompleteTask>()(
   }
 ) {}
 
+const ProjectWithTasks = Schema.Struct({
+  project: Project,
+  tasks: Schema.Array(Task)
+});
+
+export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTasks>()(
+  'GetProjectWithTasks',
+  ApplicationError,
+  ProjectWithTasks,
+  {
+    projectId: ProjectId
+  }
+) {}
+
 /**
  * Application Services
  */
@@ -89,10 +103,23 @@ const completeTask = ({ taskId }: CompleteTask) =>
     yield* repo.save(task);
   }).pipe(withTransactionalBoundary) satisfies RequestHandler<CompleteTask>;
 
+const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
+  Effect.gen(function* () {
+    const project = yield* Effect.serviceFunctions(ProjectRepository)
+      .findById(projectId)
+      .pipe(succeedOrNotFound(`No project ${projectId}`));
+    const tasks = yield* Effect.serviceFunctions(TaskRepository)
+      .findAllByProjectId(projectId)
+      .pipe(succeedOrNotFound(`No project ${projectId}`));
+
+    return { tasks, project };
+  }) satisfies RequestHandler<GetProjectWithTasks>;
+
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
-  Rpc.effect(CompleteTask, completeTask)
+  Rpc.effect(CompleteTask, completeTask),
+  Rpc.effect(GetProjectWithTasks, projectWithTasks)
 );
 
 /**
