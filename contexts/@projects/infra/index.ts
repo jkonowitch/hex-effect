@@ -63,8 +63,6 @@ const TransactionalBoundaryLive = Layer.effect(
         Effect.gen(function* () {
           yield* Effect.log('begin called');
           const uow = yield* UnitOfWorkLive(sqlite.client);
-          const scope = yield* Scope.Scope;
-          yield* Scope.addFinalizer(scope, Effect.log('closed scope!'));
           yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(UnitOfWork, uow));
         }),
       commit: () =>
@@ -78,12 +76,24 @@ const TransactionalBoundaryLive = Layer.effect(
   })
 );
 
-const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type']> =>
+const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never, Scope.Scope> =>
   Effect.gen(function* () {
     const units = yield* Ref.make<ReadonlyArray<CompiledQuery>>([]);
     const kyselyClient = new Kysely<DB>({
       dialect: new BunSqliteDialect({ database: client })
     });
+
+    yield* Effect.addFinalizer(() =>
+      units.get.pipe(
+        Effect.map((u) => u.length),
+        Effect.andThen((length) =>
+          length === 0
+            ? Effect.void
+            : Effect.logError('Unit of Work has remaining, uncommitted units')
+        )
+      )
+    );
+
     const session = {
       direct: kyselyClient,
       call: <A>(f: (db: Kysely<DB>) => Promise<A>) =>
