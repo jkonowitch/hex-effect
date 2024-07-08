@@ -104,16 +104,16 @@ const completeTask = ({ taskId }: CompleteTask) =>
   }).pipe(withTransactionalBoundary) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
-  Effect.gen(function* () {
-    const project = yield* Effect.serviceFunctions(ProjectRepository)
-      .findById(projectId)
-      .pipe(succeedOrNotFound(`No project ${projectId}`));
-    const tasks = yield* Effect.serviceFunctions(TaskRepository)
-      .findAllByProjectId(projectId)
-      .pipe(succeedOrNotFound(`No project ${projectId}`));
-
-    return { tasks, project };
-  }) satisfies RequestHandler<GetProjectWithTasks>;
+  Effect.zip(
+    Effect.serviceFunctions(ProjectRepository).findById(projectId),
+    Effect.serviceFunctions(TaskRepository).findAllByProjectId(projectId),
+    { concurrent: true }
+  )
+    .pipe(
+      Effect.map(([project, tasks]) => Option.all({ project, tasks })),
+      succeedOrNotFound()
+    )
+    .pipe(withTransactionalBoundary) satisfies RequestHandler<GetProjectWithTasks>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
