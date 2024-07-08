@@ -59,10 +59,10 @@ const TransactionalBoundaryLive = Layer.effect(
     const sqlite = yield* SqliteClient;
 
     return {
-      begin: () =>
+      begin: (opts) =>
         Effect.gen(function* () {
           yield* Effect.log('begin called');
-          const uow = yield* UnitOfWorkLive(sqlite.client);
+          const uow = yield* UnitOfWorkLive(sqlite.client, opts);
           yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(UnitOfWork, uow));
         }),
       commit: () =>
@@ -76,22 +76,22 @@ const TransactionalBoundaryLive = Layer.effect(
   })
 );
 
-const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never, Scope.Scope> =>
+const UnitOfWorkLive = (
+  client: SQLite,
+  // will be adding this feature later, as well as "strict" transaction mode
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  opts = { readonly: false }
+): Effect.Effect<UnitOfWork['Type'], never, Scope.Scope> =>
   Effect.gen(function* () {
     const units = yield* Ref.make<ReadonlyArray<CompiledQuery>>([]);
     const kyselyClient = new Kysely<DB>({
       dialect: new BunSqliteDialect({ database: client })
     });
 
+    let committed = false;
+
     yield* Effect.addFinalizer(() =>
-      units.get.pipe(
-        Effect.map((u) => u.length),
-        Effect.andThen((length) =>
-          length === 0
-            ? Effect.void
-            : Effect.logError('Unit of Work has remaining, uncommitted units')
-        )
-      )
+      committed ? Effect.void : Effect.logError('This unit of work was not committed!')
     );
 
     const session = {
@@ -111,6 +111,7 @@ const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never
       commit() {
         return Effect.gen(function* () {
           const operations = yield* Ref.getAndSet(units, []);
+          if (operations.length === 0) return;
           yield* session.call((db) =>
             db.transaction().execute(async (tx) => {
               for (const op of operations) {
@@ -118,6 +119,7 @@ const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never
               }
             })
           );
+          committed = true;
         });
       },
       session

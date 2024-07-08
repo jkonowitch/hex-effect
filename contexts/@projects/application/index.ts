@@ -62,7 +62,7 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
 export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   TransactionalBoundary,
   {
-    begin(): Effect.Effect<void, never, Scope.Scope>;
+    begin(opts?: { readonly: boolean }): Effect.Effect<void, never, Scope.Scope>;
     commit(): Effect.Effect<void, never, Scope.Scope>;
   }
 >() {}
@@ -78,7 +78,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   Effect.gen(function* () {
@@ -89,7 +89,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     const task = yield* project.addTask(description);
     yield* Effect.serviceFunctions(TaskRepository).save(task);
     return task.id;
-  }).pipe(withTransactionalBoundary) satisfies RequestHandler<AddTask>;
+  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
   Effect.gen(function* () {
@@ -101,7 +101,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -113,7 +113,9 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
       Effect.map(([project, tasks]) => Option.all({ project, tasks })),
       succeedOrNotFound()
     )
-    .pipe(withTransactionalBoundary) satisfies RequestHandler<GetProjectWithTasks>;
+    .pipe(
+      withTransactionalBoundary({ readonly: true })
+    ) satisfies RequestHandler<GetProjectWithTasks>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
@@ -138,14 +140,13 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
     );
 }
 
-function withTransactionalBoundary<A, E, R>(
-  eff: Effect.Effect<A, E, R>
-): Effect.Effect<A, E, R | TransactionalBoundary> {
-  return Effect.gen(function* () {
-    const tx = yield* TransactionalBoundary;
-    yield* tx.begin();
-    const result = yield* eff;
-    yield* tx.commit();
-    return result;
-  }).pipe(Effect.scoped);
+function withTransactionalBoundary<A, E, R>(opts = { readonly: false }) {
+  return (eff: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const tx = yield* TransactionalBoundary;
+      yield* tx.begin(opts);
+      const result = yield* eff;
+      yield* tx.commit();
+      return result;
+    }).pipe(Effect.scoped);
 }
