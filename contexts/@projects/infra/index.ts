@@ -3,7 +3,6 @@ import { BunSqliteDialect } from 'kysely-bun-sqlite';
 import { Effect, Context, Layer, Ref, Config, Option, FiberRef, Scope } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { Kysely, CompiledQuery } from 'kysely';
-import type { DB } from './persistence/schema.js';
 import {
   Project,
   ProjectDomainPublisher,
@@ -16,15 +15,8 @@ import {
 import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
-import {
-  AddTask,
-  CompleteTask,
-  CreateProject,
-  GetProjectWithTasks,
-  router,
-  TransactionalBoundary
-} from '@projects/application';
-import { Router } from '@effect/rpc';
+import { TransactionalBoundary } from '@projects/application';
+import type { DB } from './persistence/schema.js';
 
 /**
  * Infrastructure Services
@@ -253,46 +245,3 @@ const DomainServiceLive = Layer.mergeAll(
 );
 
 export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
-
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
-const handler = Router.toHandlerUndecoded(router);
-
-async function execCreateProject() {
-  const res = await handler(CreateProject.make({ title: 'HELLO' })).pipe(
-    Effect.provide(ApplicationLive),
-    Effect.runPromise
-  );
-
-  console.log(res);
-}
-async function execAddTask(projectId: Project['id']) {
-  const res = await handler(AddTask.make({ projectId, description: 'kralf' })).pipe(
-    Effect.provide(ApplicationLive),
-    Effect.runPromise
-  );
-
-  console.log(res);
-}
-
-// await execAddTask(ProjectId.make('5shj6M008O2Z0TlUVt8f0'));
-
-async function execCompleteTask(taskId: Task['id']) {
-  const res = await handler(CompleteTask.make({ taskId })).pipe(
-    Effect.provide(ApplicationLive),
-    Effect.runPromise
-  );
-
-  console.log(res);
-}
-
-// await execCompleteTask(TaskId.make('wrX10xgdNV0VHAGJ5jmKx'));
-
-async function execGetAllProjectsAndTasks() {
-  const res = await handler(
-    GetProjectWithTasks.make({ projectId: ProjectId.make('5shj6M008O2Z0TlUVt8f0') })
-  ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
-
-  console.log(res);
-}
-await execGetAllProjectsAndTasks();
