@@ -74,6 +74,8 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   }
 >() {}
 
+// export class EventStore extends Context.Tag('EventStore')<EventStore, { write(event)}
+
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
   Request.Request.Success<A>,
   Request.Request.Error<A>,
@@ -164,7 +166,7 @@ function withTransactionalBoundary(opts = { readonly: true }) {
     Effect.gen(function* () {
       const tx = yield* TransactionalBoundary;
       yield* tx.begin(opts);
-      const result = yield* eff.pipe(Effect.tapError(() => tx.rollback()));
+      const result = yield* eff.pipe(Effect.tapError(tx.rollback));
       yield* tx.commit();
       return result;
     }).pipe(Effect.scoped);
