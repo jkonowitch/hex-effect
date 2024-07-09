@@ -69,7 +69,7 @@ export class ProcessEvent extends Schema.TaggedRequest<ProcessEvent>()(
 export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   TransactionalBoundary,
   {
-    begin(opts?: { readonly: boolean }): Effect.Effect<void, never, Scope.Scope>;
+    begin(mode: 'readonly' | 'readwrite'): Effect.Effect<void, never, Scope.Scope>;
     commit(): Effect.Effect<void, never, Scope.Scope>;
     rollback(): Effect.Effect<void>;
   }
@@ -86,7 +86,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary('readwrite')) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   pipe(
@@ -95,7 +95,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     Effect.flatMap((project) => project.addTask(description)),
     Effect.tap(Effect.serviceFunctions(TaskRepository).save),
     Effect.map(get('id')),
-    withTransactionalBoundary({ readonly: false })
+    withTransactionalBoundary('readwrite')
   ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
@@ -108,7 +108,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary('readwrite')) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -131,7 +131,7 @@ const processEvent = ({ event }: ProcessEvent) =>
       Match.exhaustive
     )
     // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<ProcessEvent>;
+    .pipe(withTransactionalBoundary('readwrite')) satisfies RequestHandler<ProcessEvent>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
@@ -157,13 +157,15 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
     );
 }
 
-function withTransactionalBoundary(opts = { readonly: true }) {
+function withTransactionalBoundary(
+  mode: Parameters<TransactionalBoundary['Type']['begin']>[0] = 'readonly'
+) {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
   ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
       const tx = yield* TransactionalBoundary;
-      yield* tx.begin(opts);
+      yield* tx.begin(mode);
       const result = yield* eff.pipe(Effect.tapError(tx.rollback));
       yield* tx.commit();
       return result;

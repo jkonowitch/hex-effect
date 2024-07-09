@@ -44,11 +44,11 @@ const TransactionalBoundaryLive = Layer.effect(
     const writableConnection = new SQLite(connectionString);
 
     return {
-      begin: (opts) =>
+      begin: (mode) =>
         Effect.gen(function* () {
           yield* Effect.log('begin called');
           const uow = yield* UnitOfWorkLive(
-            opts?.readonly ? readonlyConnection : writableConnection
+            mode === 'readonly' ? readonlyConnection : writableConnection
           );
           yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(UnitOfWork, uow));
         }),
