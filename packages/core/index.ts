@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { Effect } from 'effect';
+import { Effect, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 export const EventBase = Schema.Struct({
@@ -18,4 +18,10 @@ type EventBaseWithTag = typeof EventBase.Type & { _tag: string };
 
 export type DomainEventPublisher = {
   publish(event: EventBaseWithTag): Effect.Effect<void>;
+};
+
+export type TransactionalBoundary = {
+  begin(mode: 'readonly' | 'readwrite'): Effect.Effect<void, never, Scope.Scope>;
+  commit(): Effect.Effect<void, never, Scope.Scope>;
+  rollback(): Effect.Effect<void>;
 };

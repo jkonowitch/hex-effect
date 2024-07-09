@@ -3,12 +3,7 @@ import { Effect, Context, Layer, Scope, Config, Ref, FiberRef } from 'effect';
 import { Database as SQLite, SQLiteError } from 'bun:sqlite';
 import { UnknownException } from 'effect/Cause';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
-
-export type TransactionalBoundary = {
-  begin(mode: 'readonly' | 'readwrite'): Effect.Effect<void, never, Scope.Scope>;
-  commit(): Effect.Effect<void, never, Scope.Scope>;
-  rollback(): Effect.Effect<void>;
-};
+import type { TransactionalBoundary } from '@hex-effect/core';
 
 export type UnitOfWork<DB> = {
   readonly write: (op: CompiledQuery) => Effect.Effect<void>;
