@@ -58,7 +58,8 @@ const TransactionalBoundaryLive = Layer.effect(
           const uow = yield* assertUnitOfWork;
           // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
           yield* uow.commit().pipe(Effect.orDie);
-        })
+        }),
+      rollback: () => Effect.log('no op')
     };
   })
 );

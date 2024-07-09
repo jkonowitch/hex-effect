@@ -70,6 +70,7 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   {
     begin(opts?: { readonly: boolean }): Effect.Effect<void, never, Scope.Scope>;
     commit(): Effect.Effect<void, never, Scope.Scope>;
+    rollback(): Effect.Effect<void>;
   }
 >() {}
 
@@ -156,12 +157,14 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
     );
 }
 
-function withTransactionalBoundary<A, E, R>(opts = { readonly: true }) {
-  return (eff: Effect.Effect<A, E, R>) =>
+function withTransactionalBoundary(opts = { readonly: true }) {
+  return <A, E, R>(
+    eff: Effect.Effect<A, E, R>
+  ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
       const tx = yield* TransactionalBoundary;
       yield* tx.begin(opts);
-      const result = yield* eff;
+      const result = yield* eff.pipe(Effect.tapError(() => tx.rollback()));
       yield* tx.commit();
       return result;
     }).pipe(Effect.scoped);
