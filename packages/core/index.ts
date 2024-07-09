@@ -18,9 +18,4 @@ type EventBaseWithTag = typeof EventBase.Type & { _tag: string };
 
 export type DomainEventPublisher = {
   publish(event: EventBaseWithTag): Effect.Effect<void>;
-  consume(): Effect.Effect<EventBaseWithTag[]>;
-};
-
-export type EventStore = {
-  write(event: EventBaseWithTag): Effect.Effect<void>;
 };
