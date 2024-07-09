@@ -16,6 +16,7 @@
     "@effect/rpc": "^0.31.21",
     "@effect/schema": "^0.68.18",
     "@hex-effect/infra": "workspace:*",
+    "@hex-effect/infra-bun-sqlite-kysely": "workspace:*",
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
     "effect": "^3.4.8",

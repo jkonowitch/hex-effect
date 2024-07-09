@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Option } from 'effect';
+import { Effect, Context, Layer, Option, Config } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
@@ -12,12 +12,15 @@ import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
-import { assertUnitOfWork, makeTransactionalBoundary, UnitOfWork } from '@hex-effect/infra';
-import { ProjectTransactionalBoundary } from '@projects/application';
+import { assertUnitOfWork, UnitOfWork } from '@hex-effect/infra';
+import { GetProjectWithTasks, ProjectTransactionalBoundary, router } from '@projects/application';
+import { Router } from '@effect/rpc';
+import type { SQLiteError } from 'bun:sqlite';
+import { makeTransactionalBoundary } from '@hex-effect/infra-bun-sqlite-kysely';
 
 class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
   ProjectUnitOfWork,
-  UnitOfWork<DB>
+  UnitOfWork<DB, SQLiteError>
 >() {}
 
 const unitOfWork = assertUnitOfWork(ProjectUnitOfWork);
@@ -139,9 +142,17 @@ const DomainServiceLive = Layer.mergeAll(
 
 export const ApplicationLive = Layer.provideMerge(
   DomainServiceLive,
-  makeBunSqliteTransactionalBoundary(
+  makeTransactionalBoundary(
     ProjectTransactionalBoundary,
     ProjectUnitOfWork,
     Config.string('PROJECT_DB')
   )
 );
+
+const handler = Router.toHandlerUndecoded(router);
+
+const res = await handler(
+  GetProjectWithTasks.make({ projectId: ProjectId.make('5shj6M008O2Z0TlUVt8f0') })
+).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
+
+console.log(res);
