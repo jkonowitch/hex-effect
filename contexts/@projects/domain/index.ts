@@ -1,4 +1,5 @@
 import { Schema } from '@effect/schema';
+import { DomainEventPublisher, EventBase } from '@hex-effect/core';
 import { Context, Effect } from 'effect';
 import type { Option } from 'effect/Option';
 
@@ -65,11 +66,21 @@ export class Task extends Schema.TaggedClass<Task>()('Task', {
   }
 }
 
+const ProjectEventBase = Schema.Struct({
+  ...EventBase.fields,
+  _context: Schema.Literal('@projects').pipe(
+    Schema.propertySignature,
+    Schema.withConstructorDefault(() => '@projects' as const)
+  )
+});
+
 export const ProjectCreatedEvent = Schema.TaggedStruct('ProjectCreatedEvent', {
+  ...ProjectEventBase.fields,
   projectId: ProjectId
 });
 
 export const TaskCompletedEvent = Schema.TaggedStruct('TaskCompletedEvent', {
+  ...ProjectEventBase.fields,
   taskId: TaskId
 });
 
@@ -100,7 +111,5 @@ export const ProjectDomainEvents = Schema.Union(ProjectCreatedEvent, TaskComplet
 
 export class ProjectDomainPublisher extends Context.Tag('ProjectDomainPublisher')<
   ProjectDomainPublisher,
-  {
-    publish(event: typeof ProjectDomainEvents.Type): Effect.Effect<void>;
-  }
+  DomainEventPublisher
 >() {}
