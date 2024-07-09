@@ -139,5 +139,9 @@ const DomainServiceLive = Layer.mergeAll(
 
 export const ApplicationLive = Layer.provideMerge(
   DomainServiceLive,
-  makeTransactionalBoundary(ProjectTransactionalBoundary, ProjectUnitOfWork)
+  makeBunSqliteTransactionalBoundary(
+    ProjectTransactionalBoundary,
+    ProjectUnitOfWork,
+    Config.string('PROJECT_DB')
+  )
 );

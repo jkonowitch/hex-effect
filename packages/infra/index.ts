@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialect, Kysely, type CompiledQuery } from 'kysely';
-import { Effect, Context, Layer, Scope, Config, Ref, FiberRef } from 'effect';
+import { Effect, Context, Layer, Scope, Ref, FiberRef, ConfigError } from 'effect';
 import { Database as SQLite, SQLiteError } from 'bun:sqlite';
 import { UnknownException } from 'effect/Cause';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
@@ -17,14 +17,15 @@ type DatabaseSession<DB> = {
   call: <A>(f: (db: Kysely<DB>) => Promise<A>) => Effect.Effect<A, SQLiteError | UnknownException>;
 };
 
-export const makeTransactionalBoundary = (
+export const makeBunSqliteTransactionalBoundary = (
   txBoundaryTag: Context.Tag<any, TransactionalBoundary>,
-  uowTag: Context.Tag<any, UnitOfWork<any>>
+  uowTag: Context.Tag<any, UnitOfWork<any>>,
+  getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
 ) =>
   Layer.effect(
     txBoundaryTag,
     Effect.gen(function* () {
-      const connectionString = yield* Config.string('PROJECT_DB');
+      const connectionString = yield* getConnectionString;
       const readonlyConnection = new SQLite(connectionString, { readonly: true });
       const writableConnection = new SQLite(connectionString);
 
