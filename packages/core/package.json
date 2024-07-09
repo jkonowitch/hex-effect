@@ -1,10 +1,13 @@
 {
   "name": "@hex-effect/core",
   "version": "0.0.1",
-  "scripts": {},
+  "scripts": {
+    "build": "tsup --format esm index.ts --dts"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*"
+    "@repo/typescript-config": "workspace:*",
+    "tsup": "^8.1.0"
   },
   "type": "module",
   "dependencies": {
