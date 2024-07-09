@@ -15,7 +15,7 @@ import {
 import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
-import { TransactionalBoundary } from '@projects/application';
+import { ProjectTransactionalBoundary } from '@projects/application';
 import type { DB } from './persistence/schema.js';
 
 /**
@@ -37,7 +37,7 @@ export class UnitOfWork extends Context.Tag('UnitOfWork')<
 >() {}
 
 const TransactionalBoundaryLive = Layer.effect(
-  TransactionalBoundary,
+  ProjectTransactionalBoundary,
   Effect.gen(function* () {
     const connectionString = yield* Config.string('PROJECT_DB');
     const readonlyConnection = new SQLite(connectionString, { readonly: true });

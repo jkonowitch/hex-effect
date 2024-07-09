@@ -1,5 +1,6 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
+import { TransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   ProjectDomainEvents,
@@ -66,13 +67,9 @@ export class ProcessEvent extends Schema.TaggedRequest<ProcessEvent>()(
  * Application Services
  */
 
-export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
-  TransactionalBoundary,
-  {
-    begin(mode: 'readonly' | 'readwrite'): Effect.Effect<void, never, Scope.Scope>;
-    commit(): Effect.Effect<void, never, Scope.Scope>;
-    rollback(): Effect.Effect<void>;
-  }
+export class ProjectTransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
+  ProjectTransactionalBoundary,
+  TransactionalBoundary
 >() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
@@ -158,13 +155,13 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
 }
 
 function withTransactionalBoundary(
-  mode: Parameters<TransactionalBoundary['Type']['begin']>[0] = 'readonly'
+  mode: Parameters<ProjectTransactionalBoundary['Type']['begin']>[0] = 'readonly'
 ) {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
+  ): Effect.Effect<A, E, ProjectTransactionalBoundary | Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
-      const tx = yield* TransactionalBoundary;
+      const tx = yield* ProjectTransactionalBoundary;
       yield* tx.begin(mode);
       const result = yield* eff.pipe(Effect.tapError(tx.rollback));
       yield* tx.commit();
