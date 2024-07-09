@@ -1,0 +1,10 @@
+{
+  "name": "@hex-effect/core",
+  "version": "0.0.1",
+  "scripts": {},
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "type": "module"
+}
