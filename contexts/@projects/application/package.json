@@ -11,6 +11,7 @@
     "@effect/rpc": "^0.31.21",
     "@effect/schema": "^0.68.18",
     "@projects/domain": "workspace:*",
+    "@hex-effect/core": "workspace:*",
     "effect": "^3.4.8"
   },
   "type": "module"

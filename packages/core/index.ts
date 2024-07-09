@@ -14,6 +14,13 @@ export const EventBase = Schema.Struct({
   )
 });
 
+type EventBaseWithTag = typeof EventBase.Type & { _tag: string };
+
 export type DomainEventPublisher = {
-  publish(event: typeof EventBase.Type & { _tag: string }): Effect.Effect<void>;
+  publish(event: EventBaseWithTag): Effect.Effect<void>;
+  consume(): Effect.Effect<EventBaseWithTag[]>;
+};
+
+export type EventStore = {
+  write(event: EventBaseWithTag): Effect.Effect<void>;
 };

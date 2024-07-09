@@ -1,8 +1,10 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
+import type { EventStore } from '@hex-effect/core';
 import {
   Project,
   ProjectDomainEvents,
+  ProjectDomainPublisher,
   ProjectId,
   ProjectRepository,
   Task,
@@ -74,7 +76,10 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   }
 >() {}
 
-// export class EventStore extends Context.Tag('EventStore')<EventStore, { write(event)}
+export class ProjectEventStore extends Context.Tag('ProjectEventStore')<
+  ProjectEventStore,
+  EventStore
+>() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
   Request.Request.Success<A>,
@@ -87,7 +92,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<CreateProject>;
+  }).pipe(withCommand) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   Effect.gen(function* () {
@@ -98,7 +103,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     const task = yield* project.addTask(description);
     yield* Effect.serviceFunctions(TaskRepository).save(task);
     return task.id;
-  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<AddTask>;
+  }).pipe(withCommand) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
   Effect.gen(function* () {
@@ -110,7 +115,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withCommand) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -133,7 +138,7 @@ const processEvent = ({ event }: ProcessEvent) =>
       Match.exhaustive
     )
     // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<ProcessEvent>;
+    .pipe(withCommand) satisfies RequestHandler<ProcessEvent>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
@@ -159,6 +164,9 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
     );
 }
 
+const withCommand = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
+  Effect.zipLeft(eff, writeEventsToStore).pipe(withTransactionalBoundary({ readonly: false }));
+
 function withTransactionalBoundary(opts = { readonly: true }) {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
@@ -171,3 +179,8 @@ function withTransactionalBoundary(opts = { readonly: true }) {
       return result;
     }).pipe(Effect.scoped);
 }
+
+const writeEventsToStore = pipe(
+  Effect.serviceFunctions(ProjectDomainPublisher).consume(),
+  Effect.flatMap(Effect.forEach(Effect.serviceFunctions(ProjectEventStore).write))
+);
