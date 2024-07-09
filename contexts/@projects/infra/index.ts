@@ -41,20 +41,24 @@ export class UnitOfWork extends Context.Tag('UnitOfWork')<
 const SqliteClientLive = Layer.effect(
   SqliteClient,
   Config.string('PROJECT_DB').pipe(
-    Effect.map((connectionString) => ({ client: new SQLite(connectionString) }))
+    Effect.map((connectionString) => ({ client: new SQLite(connectionString, { readonly: true }) }))
   )
 );
 
 const TransactionalBoundaryLive = Layer.effect(
   TransactionalBoundary,
   Effect.gen(function* () {
-    const sqlite = yield* SqliteClient;
+    const connectionString = yield* Config.string('PROJECT_DB');
+    const readonlyConnection = new SQLite(connectionString, { readonly: true });
+    const writableConnection = new SQLite(connectionString);
 
     return {
       begin: (opts) =>
         Effect.gen(function* () {
           yield* Effect.log('begin called');
-          const uow = yield* UnitOfWorkLive(sqlite.client, opts);
+          const uow = yield* UnitOfWorkLive(
+            opts?.readonly ? readonlyConnection : writableConnection
+          );
           yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(UnitOfWork, uow));
         }),
       commit: () =>
@@ -68,12 +72,7 @@ const TransactionalBoundaryLive = Layer.effect(
   })
 );
 
-const UnitOfWorkLive = (
-  client: SQLite,
-  // will be adding this feature later, as well as "strict" transaction mode
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  opts = { readonly: false }
-): Effect.Effect<UnitOfWork['Type'], never, Scope.Scope> =>
+const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never, Scope.Scope> =>
   Effect.gen(function* () {
     const units = yield* Ref.make<ReadonlyArray<CompiledQuery>>([]);
     const kyselyClient = new Kysely<DB>({

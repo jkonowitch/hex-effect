@@ -78,7 +78,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   Effect.gen(function* () {
@@ -89,7 +89,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     const task = yield* project.addTask(description);
     yield* Effect.serviceFunctions(TaskRepository).save(task);
     return task.id;
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<AddTask>;
+  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
   Effect.gen(function* () {
@@ -101,7 +101,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -111,7 +111,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   ).pipe(
     Effect.map(([project, tasks]) => Option.all({ project, tasks })),
     succeedOrNotFound(),
-    withTransactionalBoundary({ readonly: true })
+    withTransactionalBoundary()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
 export const router = Router.make(
@@ -137,7 +137,7 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
     );
 }
 
-function withTransactionalBoundary<A, E, R>(opts = { readonly: false }) {
+function withTransactionalBoundary<A, E, R>(opts = { readonly: true }) {
   return (eff: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const tx = yield* TransactionalBoundary;
