@@ -1,5 +1,6 @@
 import { Schema } from '@effect/schema';
 import { Effect } from 'effect';
+import { nanoid } from 'nanoid';
 
 export const EventBase = Schema.Struct({
   _context: Schema.String,
@@ -9,7 +10,7 @@ export const EventBase = Schema.Struct({
   ),
   messageId: Schema.String.pipe(
     Schema.propertySignature,
-    Schema.withConstructorDefault(() => '')
+    Schema.withConstructorDefault(() => nanoid())
   )
 });
 

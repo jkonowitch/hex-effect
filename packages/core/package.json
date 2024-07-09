@@ -7,6 +7,9 @@
     "@repo/typescript-config": "workspace:*"
   },
   "type": "module",
+  "dependencies": {
+    "nanoid": "~5.0.7"
+  },
   "peerDependencies": {
     "@effect/schema": ">=0.68",
     "effect": ">=3.4"
