@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialect, Kysely, type CompiledQuery } from 'kysely';
 import { Effect, Context, Layer, Scope, Config, Ref, FiberRef } from 'effect';
 import { Database as SQLite, SQLiteError } from 'bun:sqlite';
@@ -17,8 +18,8 @@ type DatabaseSession<DB> = {
 };
 
 export const makeTransactionalBoundary = (
-  txBoundaryTag: Context.Tag<unknown, TransactionalBoundary>,
-  uowTag: Context.Tag<unknown, UnitOfWork<unknown>>
+  txBoundaryTag: Context.Tag<any, TransactionalBoundary>,
+  uowTag: Context.Tag<any, UnitOfWork<any>>
 ) =>
   Layer.effect(
     txBoundaryTag,
@@ -93,7 +94,7 @@ const UnitOfWorkLive = (dialect: Dialect): Effect.Effect<UnitOfWork<unknown>, ne
     };
   });
 
-export const assertUnitOfWork = (tag: Context.Tag<unknown, UnitOfWork<unknown>>) =>
+export const assertUnitOfWork = <DB>(tag: Context.Tag<any, UnitOfWork<DB>>) =>
   Effect.serviceOptional(tag).pipe(
     Effect.catchTag('NoSuchElementException', () =>
       Effect.dieMessage('TransactionalBoundary#begin not called!')

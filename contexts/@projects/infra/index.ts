@@ -1,8 +1,4 @@
-import { Database as SQLite, SQLiteError } from 'bun:sqlite';
-import { BunSqliteDialect } from 'kysely-bun-sqlite';
-import { Effect, Context, Layer, Ref, Config, Option, FiberRef, Scope } from 'effect';
-import { UnknownException } from 'effect/Cause';
-import { Kysely, CompiledQuery } from 'kysely';
+import { Effect, Context, Layer, Option } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
@@ -15,111 +11,20 @@ import {
 import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
-import { ProjectTransactionalBoundary } from '@projects/application';
 import type { DB } from './persistence/schema.js';
+import { assertUnitOfWork, makeTransactionalBoundary, UnitOfWork } from '@hex-effect/infra';
+import { ProjectTransactionalBoundary } from '@projects/application';
 
-/**
- * Infrastructure Services
- */
-
-type DatabaseSession = {
-  direct: Kysely<DB>;
-  call: <A>(f: (db: Kysely<DB>) => Promise<A>) => Effect.Effect<A, SQLiteError | UnknownException>;
-};
-
-export class UnitOfWork extends Context.Tag('UnitOfWork')<
-  UnitOfWork,
-  {
-    readonly write: (op: CompiledQuery) => Effect.Effect<void>;
-    readonly commit: () => Effect.Effect<void, SQLiteError | UnknownException>;
-    readonly session: DatabaseSession;
-  }
+class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
+  ProjectUnitOfWork,
+  UnitOfWork<DB>
 >() {}
 
-const TransactionalBoundaryLive = Layer.effect(
-  ProjectTransactionalBoundary,
-  Effect.gen(function* () {
-    const connectionString = yield* Config.string('PROJECT_DB');
-    const readonlyConnection = new SQLite(connectionString, { readonly: true });
-    const writableConnection = new SQLite(connectionString);
-
-    return {
-      begin: (mode) =>
-        Effect.gen(function* () {
-          yield* Effect.log('begin called');
-          const uow = yield* UnitOfWorkLive(
-            mode === 'readonly' ? readonlyConnection : writableConnection
-          );
-          yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(UnitOfWork, uow));
-        }),
-      commit: () =>
-        Effect.gen(function* () {
-          yield* Effect.log('commit called');
-          const uow = yield* assertUnitOfWork;
-          // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-          yield* uow.commit().pipe(Effect.orDie);
-        }),
-      rollback: () => Effect.log('no op')
-    };
-  })
-);
-
-const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never, Scope.Scope> =>
-  Effect.gen(function* () {
-    const units = yield* Ref.make<ReadonlyArray<CompiledQuery>>([]);
-    const kyselyClient = new Kysely<DB>({
-      dialect: new BunSqliteDialect({ database: client })
-    });
-
-    let committed = false;
-
-    yield* Effect.addFinalizer(() =>
-      committed ? Effect.void : Effect.logError('This unit of work was not committed!')
-    );
-
-    const session = {
-      direct: kyselyClient,
-      call: <A>(f: (db: Kysely<DB>) => Promise<A>) =>
-        Effect.tryPromise({
-          try: () => f(kyselyClient),
-          catch: (error) => {
-            return error instanceof SQLiteError ? error : new UnknownException(error);
-          }
-        })
-    };
-    return {
-      write(op: CompiledQuery<unknown>) {
-        return Ref.update(units, (a) => [...a, op]);
-      },
-      commit() {
-        return Effect.gen(function* () {
-          const operations = yield* Ref.getAndSet(units, []);
-          if (operations.length === 0) return;
-          yield* session.call((db) =>
-            db.transaction().execute(async (tx) => {
-              for (const op of operations) {
-                await tx.executeQuery(op);
-              }
-            })
-          );
-          committed = true;
-        });
-      },
-      session
-    };
-  });
-
-const InfrastructureLive = TransactionalBoundaryLive;
+const unitOfWork = assertUnitOfWork(ProjectUnitOfWork);
 
 /**
  * Application and Domain Service Implementations
  */
-
-const assertUnitOfWork = Effect.serviceOptional(UnitOfWork).pipe(
-  Effect.catchTag('NoSuchElementException', () =>
-    Effect.dieMessage('TransactionalBoundary#begin not called!')
-  )
-);
 
 const ProjectRepositoryLive = Layer.succeed(ProjectRepository, {
   nextId() {
@@ -127,7 +32,7 @@ const ProjectRepositoryLive = Layer.succeed(ProjectRepository, {
   },
   save: (project) =>
     Effect.gen(function* () {
-      const uow = yield* assertUnitOfWork;
+      const uow = yield* unitOfWork;
       const encoded = Schema.encodeSync(Project)(project);
 
       yield* uow.write(
@@ -140,7 +45,7 @@ const ProjectRepositoryLive = Layer.succeed(ProjectRepository, {
     }),
   findById: (id) =>
     Effect.gen(function* () {
-      const uow = yield* assertUnitOfWork;
+      const uow = yield* unitOfWork;
 
       const record = yield* uow.session
         .call((db) => db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirst())
@@ -175,7 +80,7 @@ const TaskRepositoryLive = Layer.succeed(TaskRepository, {
   save: (task) =>
     Effect.gen(function* () {
       const encoded = Schema.encodeSync(RefinedTask)(task);
-      const uow = yield* assertUnitOfWork;
+      const uow = yield* unitOfWork;
       yield* uow.write(
         uow.session.direct
           .insertInto('tasks')
@@ -191,7 +96,7 @@ const TaskRepositoryLive = Layer.succeed(TaskRepository, {
     }),
   findById: (id) =>
     Effect.gen(function* () {
-      const uow = yield* assertUnitOfWork;
+      const uow = yield* unitOfWork;
 
       const record = yield* uow.session
         .call((db) => db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirst())
@@ -208,7 +113,7 @@ const TaskRepositoryLive = Layer.succeed(TaskRepository, {
     }),
   findAllByProjectId: (projectId) =>
     Effect.gen(function* () {
-      const uow = yield* assertUnitOfWork;
+      const uow = yield* unitOfWork;
 
       const records = yield* uow.session
         .call((db) =>
@@ -232,4 +137,7 @@ const DomainServiceLive = Layer.mergeAll(
   ProjectDomainPublisherLive
 );
 
-export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
+export const ApplicationLive = Layer.provideMerge(
+  DomainServiceLive,
+  makeTransactionalBoundary(ProjectTransactionalBoundary, ProjectUnitOfWork)
+);
