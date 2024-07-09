@@ -96,11 +96,11 @@ export class TaskRepository extends Context.Tag('TaskRepository')<
   }
 >() {}
 
-const allEvents = Schema.Union(ProjectCreatedEvent, TaskCompletedEvent);
+export const ProjectDomainEvents = Schema.Union(ProjectCreatedEvent, TaskCompletedEvent);
 
 export class ProjectDomainPublisher extends Context.Tag('ProjectDomainPublisher')<
   ProjectDomainPublisher,
   {
-    publish(event: typeof allEvents.Type): Effect.Effect<void>;
+    publish(event: typeof ProjectDomainEvents.Type): Effect.Effect<void>;
   }
 >() {}

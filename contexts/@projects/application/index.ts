@@ -2,13 +2,14 @@ import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import {
   Project,
+  ProjectDomainEvents,
   ProjectId,
   ProjectRepository,
   Task,
   TaskId,
   TaskRepository
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Context, Scope } from 'effect';
+import { Effect, type Request, Option, pipe, Context, Scope, Match } from 'effect';
 
 /**
  * Requests
@@ -41,18 +42,23 @@ export class CompleteTask extends Schema.TaggedRequest<CompleteTask>()(
   }
 ) {}
 
-const ProjectWithTasks = Schema.Struct({
-  project: Project,
-  tasks: Schema.Array(Task)
-});
-
 export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTasks>()(
   'GetProjectWithTasks',
   ApplicationError,
-  ProjectWithTasks,
+  Schema.Struct({
+    project: Project,
+    tasks: Schema.Array(Task)
+  }),
   {
     projectId: ProjectId
   }
+) {}
+
+export class ProcessEvent extends Schema.TaggedRequest<ProcessEvent>()(
+  'ProcessEvent',
+  ApplicationError,
+  Schema.Void,
+  { event: ProjectDomainEvents }
 ) {}
 
 /**
@@ -114,11 +120,24 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     withTransactionalBoundary()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
+const processEvent = ({ event }: ProcessEvent) =>
+  Match.value(event)
+    .pipe(
+      Match.tag('ProjectCreatedEvent', (e) =>
+        Effect.log(`Emailing user that they have created a new project with id: ${e.projectId}`)
+      ),
+      Match.tag('TaskCompletedEvent', () => Effect.void),
+      Match.exhaustive
+    )
+    // don't actually need this, but in general these event handlers will execute domain behavior
+    .pipe(withTransactionalBoundary({ readonly: false })) satisfies RequestHandler<ProcessEvent>;
+
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
-  Rpc.effect(GetProjectWithTasks, projectWithTasks)
+  Rpc.effect(GetProjectWithTasks, projectWithTasks),
+  Rpc.effect(ProcessEvent, processEvent)
 );
 
 /**
