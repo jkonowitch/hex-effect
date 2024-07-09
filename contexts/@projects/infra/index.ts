@@ -1,10 +1,9 @@
-import { Effect, Context, Layer, Option, Config } from 'effect';
+import { Effect, Context, Layer, Option, Config, Ref } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
   ProjectId,
   ProjectRepository,
-  ProjectTransactionalBoundary,
   Task,
   TaskId,
   TaskRepository
@@ -13,8 +12,8 @@ import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
-import { assertUnitOfWork, UnitOfWork } from '@hex-effect/infra';
-import { GetProjectWithTasks, router } from '@projects/application';
+import { getUnitOfWork, UnitOfWork } from '@hex-effect/infra';
+import { GetProjectWithTasks, router, ProjectTransactionalBoundary } from '@projects/application';
 import { Router } from '@effect/rpc';
 import type { SQLiteError } from 'bun:sqlite';
 import { makeTransactionalBoundary } from '@hex-effect/infra-bun-sqlite-kysely';
@@ -24,48 +23,57 @@ class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
   UnitOfWork<DB, SQLiteError>
 >() {}
 
-const unitOfWork = assertUnitOfWork(ProjectUnitOfWork, ProjectTransactionalBoundary);
+type Q<S> = S extends Ref.Ref<infer V> ? V : never;
+
+type R = Option.Option.Value<Q<UnitOfWork<DB, SQLiteError>>>;
+
+const jawn = Ref.make(Option.none<R>());
 
 /**
  * Application and Domain Service Implementations
  */
 
-const ProjectRepositoryLive = Layer.succeed(ProjectRepository, {
-  nextId() {
-    return Effect.succeed(ProjectId.make(nanoid()));
-  },
-  save: (project) =>
-    Effect.gen(function* () {
-      const uow = yield* unitOfWork;
-      const encoded = Schema.encodeSync(Project)(project);
+const ProjectRepositoryLive = Layer.effect(
+  ProjectRepository,
+  ProjectUnitOfWork.pipe(
+    Effect.map((uow) => ({
+      nextId() {
+        return Effect.succeed(ProjectId.make(nanoid()));
+      },
+      save: (project: Project) =>
+        Effect.gen(function* () {
+          const encoded = Schema.encodeSync(Project)(project);
+          const live = yield* getUnitOfWork(uow);
+          yield* live.write(
+            live.session.direct
+              .insertInto('projects')
+              .values({ id: encoded.id, title: encoded.title })
+              .onConflict((oc) => oc.doUpdateSet((eb) => ({ title: eb.ref('excluded.title') })))
+              .compile()
+          );
+        }),
+      findById: (id: (typeof ProjectId)['Type']) =>
+        Effect.gen(function* () {
+          const live = yield* getUnitOfWork(uow);
 
-      yield* uow.write(
-        uow.session.direct
-          .insertInto('projects')
-          .values({ id: encoded.id, title: encoded.title })
-          .onConflict((oc) => oc.doUpdateSet((eb) => ({ title: eb.ref('excluded.title') })))
-          .compile()
-      );
-    }),
-  findById: (id) =>
-    Effect.gen(function* () {
-      const uow = yield* unitOfWork;
+          const record = yield* live.session
+            .call((db) =>
+              db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirst()
+            )
+            .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+          if (Option.isNone(record)) return Option.none<Project>();
 
-      const record = yield* uow.session
-        .call((db) => db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirst())
-        .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+          const project = Schema.decodeSync(Project)({
+            id: record.value.id,
+            title: record.value.title,
+            _tag: 'Project'
+          });
 
-      if (Option.isNone(record)) return Option.none<Project>();
-
-      const project = Schema.decodeSync(Project)({
-        id: record.value.id,
-        title: record.value.title,
-        _tag: 'Project'
-      });
-
-      return Option.some(project);
-    })
-});
+          return Option.some(project);
+        })
+    }))
+  )
+);
 
 // Sqlite does not have a bool type, so we will encode to 0 / 1
 const RefinedTask = Schema.Struct({
@@ -77,59 +85,66 @@ const RefinedTask = Schema.Struct({
   })
 });
 
-const TaskRepositoryLive = Layer.succeed(TaskRepository, {
-  nextId() {
-    return Effect.succeed(TaskId.make(nanoid()));
-  },
-  save: (task) =>
-    Effect.gen(function* () {
-      const encoded = Schema.encodeSync(RefinedTask)(task);
-      const uow = yield* unitOfWork;
-      yield* uow.write(
-        uow.session.direct
-          .insertInto('tasks')
-          .values(omit(encoded, '_tag'))
-          .onConflict((oc) =>
-            oc.doUpdateSet((eb) => ({
-              completed: eb.ref('excluded.completed'),
-              description: eb.ref('excluded.description')
-            }))
-          )
-          .compile()
-      );
-    }),
-  findById: (id) =>
-    Effect.gen(function* () {
-      const uow = yield* unitOfWork;
+const TaskRepositoryLive = Layer.effect(
+  TaskRepository,
+  ProjectUnitOfWork.pipe(
+    Effect.map((uow) => ({
+      nextId() {
+        return Effect.succeed(TaskId.make(nanoid()));
+      },
+      save: (task: Task) =>
+        Effect.gen(function* () {
+          const encoded = Schema.encodeSync(RefinedTask)(task);
+          const live = yield* getUnitOfWork(uow);
+          yield* live.write(
+            live.session.direct
+              .insertInto('tasks')
+              .values(omit(encoded, '_tag'))
+              .onConflict((oc) =>
+                oc.doUpdateSet((eb) => ({
+                  completed: eb.ref('excluded.completed'),
+                  description: eb.ref('excluded.description')
+                }))
+              )
+              .compile()
+          );
+        }),
+      findById: (id: (typeof TaskId)['Type']) =>
+        Effect.gen(function* () {
+          const live = yield* getUnitOfWork(uow);
 
-      const record = yield* uow.session
-        .call((db) => db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirst())
-        .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+          const record = yield* live.session
+            .call((db) =>
+              db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirst()
+            )
+            .pipe(Effect.orDie, Effect.map(Option.fromNullable));
 
-      if (Option.isNone(record)) return Option.none<Task>();
+          if (Option.isNone(record)) return Option.none<Task>();
 
-      const decoded = Schema.decodeSync(RefinedTask)({
-        ...record.value,
-        _tag: 'Task'
-      });
+          const decoded = Schema.decodeSync(RefinedTask)({
+            ...record.value,
+            _tag: 'Task'
+          });
 
-      return Option.some(new Task(decoded));
-    }),
-  findAllByProjectId: (projectId) =>
-    Effect.gen(function* () {
-      const uow = yield* unitOfWork;
+          return Option.some(new Task(decoded));
+        }),
+      findAllByProjectId: (projectId: (typeof ProjectId)['Type']) =>
+        Effect.gen(function* () {
+          const live = yield* getUnitOfWork(uow);
 
-      const records = yield* uow.session
-        .call((db) =>
-          db.selectFrom('tasks').selectAll().where('projectId', '=', projectId).execute()
-        )
-        .pipe(Effect.orDie);
+          const records = yield* live.session
+            .call((db) =>
+              db.selectFrom('tasks').selectAll().where('projectId', '=', projectId).execute()
+            )
+            .pipe(Effect.orDie);
 
-      return Option.some(
-        records.map((v) => Schema.decodeSync(RefinedTask)({ ...v, _tag: 'Task' }))
-      );
-    })
-});
+          return Option.some(
+            records.map((v) => Schema.decodeSync(RefinedTask)({ ...v, _tag: 'Task' }))
+          );
+        })
+    }))
+  )
+);
 
 const ProjectDomainPublisherLive = Layer.succeed(ProjectDomainPublisher, {
   publish: () => Effect.void
@@ -141,14 +156,18 @@ const DomainServiceLive = Layer.mergeAll(
   ProjectDomainPublisherLive
 );
 
-export const ApplicationLive = Layer.provideMerge(
-  DomainServiceLive,
-  makeTransactionalBoundary(
-    ProjectTransactionalBoundary,
-    ProjectUnitOfWork,
-    Config.string('PROJECT_DB')
-  )
+const TransactionalBoundary = makeTransactionalBoundary(
+  ProjectTransactionalBoundary,
+  ProjectUnitOfWork,
+  Config.string('PROJECT_DB')
 );
+
+const InfrastructureLayer = Layer.provideMerge(
+  TransactionalBoundary,
+  Layer.effect(ProjectUnitOfWork, jawn)
+);
+
+export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLayer);
 
 const handler = Router.toHandlerUndecoded(router);
 

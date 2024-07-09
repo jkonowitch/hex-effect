@@ -1,23 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialect, Kysely, type CompiledQuery } from 'kysely';
-import { Effect, Context, Layer, Scope, Ref, FiberRef, ConfigError } from 'effect';
+import { Effect, Context, Layer, Ref, ConfigError, Option } from 'effect';
 import { Database as SQLite, SQLiteError } from 'bun:sqlite';
 import { UnknownException } from 'effect/Cause';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
 import type { TransactionalBoundary } from '@hex-effect/core';
-import { assertUnitOfWork, type UnitOfWork } from '@hex-effect/infra';
+import { getUnitOfWork, type UnitOfWork } from '@hex-effect/infra';
 
-export const makeTransactionalBoundary = <K extends Context.Tag<any, TransactionalBoundary>>(
-  txBoundaryTag: K,
-  uowTag: Context.Tag<any, UnitOfWork<any, SQLiteError>>,
+export const makeTransactionalBoundary = <
+  TX extends Context.Tag<any, TransactionalBoundary>,
+  UOW extends Context.Tag<any, UnitOfWork<any, SQLiteError>>
+>(
+  txBoundaryTag: TX,
+  uowTag: UOW,
   getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
-): Layer.Layer<Context.Tag.Identifier<K>, ConfigError.ConfigError> =>
+): Layer.Layer<Context.Tag.Identifier<TX>, ConfigError.ConfigError, Context.Tag.Identifier<UOW>> =>
   Layer.effect(
     txBoundaryTag,
     Effect.gen(function* () {
       const connectionString = yield* getConnectionString;
       const readonlyConnection = new SQLite(connectionString, { readonly: true });
       const writableConnection = new SQLite(connectionString);
+
+      const uow = yield* uowTag;
 
       return {
         begin: (mode) =>
@@ -26,24 +31,21 @@ export const makeTransactionalBoundary = <K extends Context.Tag<any, Transaction
             const dialect = new BunSqliteDialect({
               database: mode === 'readonly' ? readonlyConnection : writableConnection
             });
-            const uow = yield* UnitOfWorkLive(dialect);
-            yield* FiberRef.getAndUpdate(FiberRef.currentContext, Context.add(uowTag, uow));
+
+            yield* Ref.set(uow, Option.some(yield* UnitOfWorkLive(dialect)));
           }),
         commit: () =>
           Effect.gen(function* () {
             yield* Effect.log('commit called');
-            const uow = yield* assertUnitOfWork(uowTag, txBoundaryTag);
             // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-            yield* uow.commit().pipe(Effect.orDie);
+            yield* getUnitOfWork(uow).pipe(Effect.andThen((live) => live.commit()));
           }),
         rollback: () => Effect.log('no op')
-      } as Context.Tag.Service<K>;
+      } as Context.Tag.Service<TX>;
     })
   );
 
-const UnitOfWorkLive = (
-  dialect: Dialect
-): Effect.Effect<UnitOfWork<unknown, SQLiteError>, never, Scope.Scope> =>
+const UnitOfWorkLive = (dialect: Dialect) =>
   Effect.gen(function* () {
     const units = yield* Ref.make<ReadonlyArray<CompiledQuery>>([]);
     const kyselyClient = new Kysely<unknown>({
