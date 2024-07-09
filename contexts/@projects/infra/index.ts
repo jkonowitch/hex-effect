@@ -22,8 +22,6 @@ import type { DB } from './persistence/schema.js';
  * Infrastructure Services
  */
 
-export class SqliteClient extends Context.Tag('SqliteClient')<SqliteClient, { client: SQLite }>() {}
-
 type DatabaseSession = {
   direct: Kysely<DB>;
   call: <A>(f: (db: Kysely<DB>) => Promise<A>) => Effect.Effect<A, SQLiteError | UnknownException>;
@@ -37,13 +35,6 @@ export class UnitOfWork extends Context.Tag('UnitOfWork')<
     readonly session: DatabaseSession;
   }
 >() {}
-
-const SqliteClientLive = Layer.effect(
-  SqliteClient,
-  Config.string('PROJECT_DB').pipe(
-    Effect.map((connectionString) => ({ client: new SQLite(connectionString, { readonly: true }) }))
-  )
-);
 
 const TransactionalBoundaryLive = Layer.effect(
   TransactionalBoundary,
@@ -117,7 +108,7 @@ const UnitOfWorkLive = (client: SQLite): Effect.Effect<UnitOfWork['Type'], never
     };
   });
 
-const InfrastructureLive = TransactionalBoundaryLive.pipe(Layer.provide(SqliteClientLive));
+const InfrastructureLive = TransactionalBoundaryLive;
 
 /**
  * Application and Domain Service Implementations
@@ -166,10 +157,7 @@ const ProjectRepositoryLive = Layer.succeed(ProjectRepository, {
     })
 });
 
-/**
- * Sqlite does not have a bool type, so we will encode to 0 / 1
- */
-
+// Sqlite does not have a bool type, so we will encode to 0 / 1
 const RefinedTask = Schema.Struct({
   ...Task.fields,
   completed: Schema.transform(Schema.Int, Schema.Boolean, {
