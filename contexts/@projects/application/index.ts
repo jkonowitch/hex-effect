@@ -1,16 +1,16 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import { TransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   ProjectDomainEvents,
   ProjectId,
   ProjectRepository,
+  ProjectTransactionalBoundary,
   Task,
   TaskId,
   TaskRepository
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Context, Scope, Match } from 'effect';
+import { Effect, type Request, Option, pipe, Scope, Match } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -66,11 +66,6 @@ export class ProcessEvent extends Schema.TaggedRequest<ProcessEvent>()(
 /**
  * Application Services
  */
-
-export class ProjectTransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
-  ProjectTransactionalBoundary,
-  TransactionalBoundary
->() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
   Request.Request.Success<A>,

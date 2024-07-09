@@ -4,6 +4,7 @@ import {
   ProjectDomainPublisher,
   ProjectId,
   ProjectRepository,
+  ProjectTransactionalBoundary,
   Task,
   TaskId,
   TaskRepository
@@ -13,7 +14,7 @@ import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
 import { assertUnitOfWork, UnitOfWork } from '@hex-effect/infra';
-import { GetProjectWithTasks, ProjectTransactionalBoundary, router } from '@projects/application';
+import { GetProjectWithTasks, router } from '@projects/application';
 import { Router } from '@effect/rpc';
 import type { SQLiteError } from 'bun:sqlite';
 import { makeTransactionalBoundary } from '@hex-effect/infra-bun-sqlite-kysely';
@@ -23,7 +24,7 @@ class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
   UnitOfWork<DB, SQLiteError>
 >() {}
 
-const unitOfWork = assertUnitOfWork(ProjectUnitOfWork);
+const unitOfWork = assertUnitOfWork(ProjectUnitOfWork, ProjectTransactionalBoundary);
 
 /**
  * Application and Domain Service Implementations

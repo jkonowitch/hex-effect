@@ -7,11 +7,11 @@ import { BunSqliteDialect } from 'kysely-bun-sqlite';
 import type { TransactionalBoundary } from '@hex-effect/core';
 import { assertUnitOfWork, type UnitOfWork } from '@hex-effect/infra';
 
-export const makeTransactionalBoundary = (
-  txBoundaryTag: Context.Tag<any, TransactionalBoundary>,
+export const makeTransactionalBoundary = <K extends Context.Tag<any, TransactionalBoundary>>(
+  txBoundaryTag: K,
   uowTag: Context.Tag<any, UnitOfWork<any, SQLiteError>>,
   getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
-) =>
+): Layer.Layer<Context.Tag.Identifier<K>, ConfigError.ConfigError> =>
   Layer.effect(
     txBoundaryTag,
     Effect.gen(function* () {
@@ -32,12 +32,12 @@ export const makeTransactionalBoundary = (
         commit: () =>
           Effect.gen(function* () {
             yield* Effect.log('commit called');
-            const uow = yield* assertUnitOfWork(uowTag);
+            const uow = yield* assertUnitOfWork(uowTag, txBoundaryTag);
             // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
             yield* uow.commit().pipe(Effect.orDie);
           }),
         rollback: () => Effect.log('no op')
-      };
+      } as Context.Tag.Service<K>;
     })
   );
 

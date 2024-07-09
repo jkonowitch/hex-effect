@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { DomainEventPublisher, EventBase } from '@hex-effect/core';
+import { DomainEventPublisher, EventBase, TransactionalBoundary } from '@hex-effect/core';
 import { Context, Effect } from 'effect';
 import type { Option } from 'effect/Option';
 
@@ -88,11 +88,18 @@ export const TaskCompletedEvent = Schema.TaggedStruct('TaskCompletedEvent', {
  * Services
  */
 
+export class ProjectTransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
+  ProjectTransactionalBoundary,
+  TransactionalBoundary
+>() {}
+
 export class ProjectRepository extends Context.Tag('ProjectRepository')<
   ProjectRepository,
   {
-    save(project: Project): Effect.Effect<void>;
-    findById(id: typeof ProjectId.Type): Effect.Effect<Option<Project>>;
+    save(project: Project): Effect.Effect<void, never, ProjectTransactionalBoundary>;
+    findById(
+      id: typeof ProjectId.Type
+    ): Effect.Effect<Option<Project>, never, ProjectTransactionalBoundary>;
     nextId(): Effect.Effect<typeof ProjectId.Type>;
   }
 >() {}
@@ -100,9 +107,13 @@ export class ProjectRepository extends Context.Tag('ProjectRepository')<
 export class TaskRepository extends Context.Tag('TaskRepository')<
   TaskRepository,
   {
-    save(task: Task): Effect.Effect<void>;
-    findById(id: typeof TaskId.Type): Effect.Effect<Option<Task>>;
-    findAllByProjectId(id: typeof ProjectId.Type): Effect.Effect<Option<Task[]>>;
+    save(task: Task): Effect.Effect<void, never, ProjectTransactionalBoundary>;
+    findById(
+      id: typeof TaskId.Type
+    ): Effect.Effect<Option<Task>, never, ProjectTransactionalBoundary>;
+    findAllByProjectId(
+      id: typeof ProjectId.Type
+    ): Effect.Effect<Option<Task[]>, never, ProjectTransactionalBoundary>;
     nextId(): Effect.Effect<typeof TaskId.Type>;
   }
 >() {}
