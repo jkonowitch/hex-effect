@@ -12,6 +12,7 @@ import {
   TaskRepository
 } from '@projects/domain';
 import { Effect, type Request, Option, pipe, Context, Scope, Match } from 'effect';
+import { get } from 'effect/Struct';
 
 /**
  * Requests
@@ -95,15 +96,14 @@ const createProject = ({ title }: CreateProject) =>
   }).pipe(withCommand) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
-  Effect.gen(function* () {
-    const project = yield* pipe(
-      Effect.serviceFunctions(ProjectRepository).findById(projectId),
-      succeedOrNotFound(`No project ${projectId}`)
-    );
-    const task = yield* project.addTask(description);
-    yield* Effect.serviceFunctions(TaskRepository).save(task);
-    return task.id;
-  }).pipe(withCommand) satisfies RequestHandler<AddTask>;
+  pipe(
+    Effect.serviceFunctions(ProjectRepository).findById(projectId),
+    succeedOrNotFound(`No project ${projectId}`),
+    Effect.flatMap((project) => project.addTask(description)),
+    Effect.tap(Effect.serviceFunctions(TaskRepository).save),
+    Effect.map(get('id')),
+    withCommand
+  ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
   Effect.gen(function* () {
