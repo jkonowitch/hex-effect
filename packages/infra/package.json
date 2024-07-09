@@ -1,0 +1,22 @@
+{
+  "name": "@hex-effect/infra",
+  "version": "0.0.1",
+  "scripts": {
+    "build": "tsup --format esm index.ts --dts"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "tsup": "^8.1.0"
+  },
+  "type": "module",
+  "dependencies": {
+    "kysely-bun-sqlite": "^0.3.2",
+    "nanoid": "~5.0.7"
+  },
+  "peerDependencies": {
+    "@effect/schema": ">=0.68",
+    "effect": ">=3.4",
+    "kysely": "~0.27.4"
+  }
+}
