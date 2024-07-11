@@ -83,7 +83,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary('readwrite')) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary('write-lazy')) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   pipe(
@@ -92,7 +92,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     Effect.flatMap((project) => project.addTask(description)),
     Effect.tap(Effect.serviceFunctions(TaskRepository).save),
     Effect.map(get('id')),
-    withTransactionalBoundary('readwrite')
+    withTransactionalBoundary('write-lazy')
   ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
@@ -105,7 +105,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary('readwrite')) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary('write-lazy')) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -128,7 +128,7 @@ const processEvent = ({ event }: ProcessEvent) =>
       Match.exhaustive
     )
     // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary('readwrite')) satisfies RequestHandler<ProcessEvent>;
+    .pipe(withTransactionalBoundary('write-lazy')) satisfies RequestHandler<ProcessEvent>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
@@ -155,7 +155,7 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
 }
 
 function withTransactionalBoundary(
-  mode: Parameters<ProjectTransactionalBoundary['Type']['begin']>[0] = 'readonly'
+  mode: Parameters<ProjectTransactionalBoundary['Type']['begin']>[0] = 'read-lazy'
 ) {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
