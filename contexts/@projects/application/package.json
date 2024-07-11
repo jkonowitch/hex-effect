@@ -12,6 +12,7 @@
     "@effect/schema": "^0.68.18",
     "@projects/domain": "workspace:*",
     "@hex-effect/core": "workspace:*",
+    "@hex-effect/infra-kysely-libsql": "workspace:*",
     "effect": "^3.4.8"
   },
   "type": "module"

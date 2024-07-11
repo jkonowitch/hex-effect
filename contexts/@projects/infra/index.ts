@@ -15,12 +15,12 @@ import type { DB } from './persistence/schema.js';
 import { DatabaseSession } from '@hex-effect/infra';
 import { GetProjectWithTasks, router, ProjectTransactionalBoundary } from '@projects/application';
 import { Router } from '@effect/rpc';
-import type { SQLiteError } from 'bun:sqlite';
-import { TransactionalBoundaryLive } from '@hex-effect/infra-bun-sqlite-kysely';
+import type { LibsqlError } from '@libsql/client';
+import { TransactionalBoundaryLive } from '@hex-effect/infra-kysely-libsql';
 
 class ProjectDatabaseSession extends Context.Tag('ProjectDatabaseSession')<
   ProjectDatabaseSession,
-  DatabaseSession<DB, SQLiteError>
+  DatabaseSession<DB, LibsqlError>
 >() {}
 
 /**

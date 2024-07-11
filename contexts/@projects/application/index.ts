@@ -1,6 +1,6 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import { TransactionalBoundary } from '@hex-effect/core';
+import type { TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
 import {
   Project,
   ProjectDomainEvents,
@@ -83,7 +83,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary('write-lazy')) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary('batched')) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   pipe(
@@ -92,7 +92,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     Effect.flatMap((project) => project.addTask(description)),
     Effect.tap(Effect.serviceFunctions(TaskRepository).save),
     Effect.map(get('id')),
-    withTransactionalBoundary('write-lazy')
+    withTransactionalBoundary('batched')
   ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
@@ -105,7 +105,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary('write-lazy')) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary('batched')) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -128,7 +128,7 @@ const processEvent = ({ event }: ProcessEvent) =>
       Match.exhaustive
     )
     // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary('write-lazy')) satisfies RequestHandler<ProcessEvent>;
+    .pipe(withTransactionalBoundary('batched')) satisfies RequestHandler<ProcessEvent>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
@@ -155,7 +155,7 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
 }
 
 function withTransactionalBoundary(
-  mode: Parameters<ProjectTransactionalBoundary['Type']['begin']>[0] = 'read-lazy'
+  mode: Parameters<ProjectTransactionalBoundary['Type']['begin']>[0] = 'readonly'
 ) {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
