@@ -11,10 +11,10 @@ import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { createClient, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 
+type Modes = 'readonly' | 'batched' | 'serialized' | 'none';
+
 export type TransactionalBoundary = {
-  begin(
-    mode: 'readonly' | 'batched' | 'serialized' | 'none'
-  ): Effect.Effect<void, never, Scope.Scope>;
+  begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
   commit(): Effect.Effect<void, never, Scope.Scope>;
   rollback(): Effect.Effect<void>;
 };
@@ -58,6 +58,8 @@ export const TransactionalBoundaryLive = <
   return boundaryLayer.pipe(Layer.provideMerge(sessionLayer));
 };
 
+type TransactionSession = { writes: ReadonlyArray<CompiledQuery<unknown>>; mode: Modes };
+
 const makeTransactionalBoundary = <Session extends DbSessionTag>(
   DbSession: Session,
   connectionString: string
@@ -71,17 +73,19 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
     const session = yield* DbSession;
     const hotInstance = new Kysely({ dialect: new LibsqlDialect({ client }) });
 
+    let transactionSession: Ref.Ref<TransactionSession>;
+
     const boundary: TransactionalBoundary = {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      begin: (_mode) =>
+      begin: (mode) =>
         Effect.gen(function* () {
           yield* Effect.log('begin called');
-
+          transactionSession = yield* Ref.make<TransactionSession>({ writes: [], mode });
           yield* Ref.set(session, DatabaseSessionLive(hotInstance));
         }),
       commit: () =>
         Effect.gen(function* () {
           yield* Effect.log('commit called');
+          yield* Ref.get(transactionSession).pipe(Effect.flatMap(Effect.log));
           // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
         }),
       rollback: () => Effect.log('no op')
