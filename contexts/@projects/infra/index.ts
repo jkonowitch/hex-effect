@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Option, Ref } from 'effect';
+import { Effect, Context, Layer, Option, Ref, Config } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
@@ -157,7 +157,8 @@ const DomainServiceLive = Layer.mergeAll(
 
 const TransactionalBoundary = TransactionalBoundaryLive(
   ProjectTransactionalBoundary,
-  ProjectDatabaseSession
+  ProjectDatabaseSession,
+  Config.string('PROJECT_DB')
 );
 
 export const ApplicationLive = Layer.provideMerge(DomainServiceLive, TransactionalBoundary);
