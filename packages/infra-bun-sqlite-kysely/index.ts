@@ -89,9 +89,7 @@ export const TransactionalBoundaryLive = <
   return q.pipe(Layer.provideMerge(shmee));
 };
 
-const makeTransactionalBoundary = <
-  Session extends Context.Tag<any, DatabaseSession<unknown, SQLiteError>>
->(
+const makeTransactionalBoundary = <Session extends DbSessionTag>(
   getConnectionString: Effect.Effect<string, ConfigError.ConfigError>,
   DbSession: Session
 ): Effect.Effect<
@@ -104,6 +102,7 @@ const makeTransactionalBoundary = <
     const client = new SQLite(connectionString);
 
     const uow = yield* DbSession;
+    yield* Effect.log(uow);
     // const uow = yield* Effect.serviceFunctions(UnitOfWork).write();
 
     const boundary: TransactionalBoundary = {

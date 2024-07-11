@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Option, Config, Ref } from 'effect';
+import { Effect, Context, Layer, Option, Ref } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
@@ -18,8 +18,8 @@ import { Router } from '@effect/rpc';
 import type { SQLiteError } from 'bun:sqlite';
 import { TransactionalBoundaryLive } from '@hex-effect/infra-bun-sqlite-kysely';
 
-class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
-  ProjectUnitOfWork,
+class ProjectDatabaseSession extends Context.Tag('ProjectDatabaseSession')<
+  ProjectDatabaseSession,
   DatabaseSession<DB, SQLiteError>
 >() {}
 
@@ -29,32 +29,34 @@ class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
 
 const ProjectRepositoryLive = Layer.effect(
   ProjectRepository,
-  ProjectUnitOfWork.pipe(
-    Effect.map((uow) => ({
+  ProjectDatabaseSession.pipe(
+    Effect.map((session) => ({
       nextId() {
         return Effect.succeed(ProjectId.make(nanoid()));
       },
       save: (project: Project) =>
         Effect.gen(function* () {
           const encoded = Schema.encodeSync(Project)(project);
-          const live = yield* getUnitOfWork(uow);
-          yield* live.write(
-            live.session.direct
+          const { write, queryBuilder } = yield* Ref.get(session);
+          yield* write(
+            queryBuilder
               .insertInto('projects')
               .values({ id: encoded.id, title: encoded.title })
               .onConflict((oc) => oc.doUpdateSet((eb) => ({ title: eb.ref('excluded.title') })))
               .compile()
-          );
+          ).pipe(Effect.orDie);
         }),
       findById: (id: (typeof ProjectId)['Type']) =>
         Effect.gen(function* () {
-          const live = yield* getUnitOfWork(uow);
+          const { read, queryBuilder } = yield* Ref.get(session);
 
-          const record = yield* live.session
-            .call((db) =>
-              db.selectFrom('projects').selectAll().where('id', '=', id).executeTakeFirst()
-            )
-            .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+          const record = yield* read(
+            queryBuilder.selectFrom('projects').selectAll().where('id', '=', id).compile()
+          ).pipe(
+            Effect.orDie,
+            Effect.map((result) => Option.fromNullable(result.rows.at(0)))
+          );
+
           if (Option.isNone(record)) return Option.none<Project>();
 
           const project = Schema.decodeSync(Project)({
@@ -81,17 +83,17 @@ const RefinedTask = Schema.Struct({
 
 const TaskRepositoryLive = Layer.effect(
   TaskRepository,
-  ProjectUnitOfWork.pipe(
-    Effect.map((uow) => ({
+  ProjectDatabaseSession.pipe(
+    Effect.map((session) => ({
       nextId() {
         return Effect.succeed(TaskId.make(nanoid()));
       },
       save: (task: Task) =>
         Effect.gen(function* () {
           const encoded = Schema.encodeSync(RefinedTask)(task);
-          const live = yield* getUnitOfWork(uow);
-          yield* live.write(
-            live.session.direct
+          const { write, queryBuilder } = yield* Ref.get(session);
+          yield* write(
+            queryBuilder
               .insertInto('tasks')
               .values(omit(encoded, '_tag'))
               .onConflict((oc) =>
@@ -101,17 +103,18 @@ const TaskRepositoryLive = Layer.effect(
                 }))
               )
               .compile()
-          );
+          ).pipe(Effect.orDie);
         }),
       findById: (id: (typeof TaskId)['Type']) =>
         Effect.gen(function* () {
-          const live = yield* getUnitOfWork(uow);
+          const { read, queryBuilder } = yield* Ref.get(session);
 
-          const record = yield* live.session
-            .call((db) =>
-              db.selectFrom('tasks').selectAll().where('id', '=', id).executeTakeFirst()
-            )
-            .pipe(Effect.orDie, Effect.map(Option.fromNullable));
+          const record = yield* read(
+            queryBuilder.selectFrom('tasks').selectAll().where('id', '=', id).compile()
+          ).pipe(
+            Effect.orDie,
+            Effect.map((result) => Option.fromNullable(result.rows.at(0)))
+          );
 
           if (Option.isNone(record)) return Option.none<Task>();
 
@@ -124,13 +127,15 @@ const TaskRepositoryLive = Layer.effect(
         }),
       findAllByProjectId: (projectId: (typeof ProjectId)['Type']) =>
         Effect.gen(function* () {
-          const live = yield* getUnitOfWork(uow);
+          const { read, queryBuilder } = yield* Ref.get(session);
 
-          const records = yield* live.session
-            .call((db) =>
-              db.selectFrom('tasks').selectAll().where('projectId', '=', projectId).execute()
-            )
-            .pipe(Effect.orDie);
+          const { rows: records } = yield* read(
+            queryBuilder
+              .selectFrom('tasks')
+              .selectAll()
+              .where('projectId', '=', projectId)
+              .compile()
+          ).pipe(Effect.orDie);
 
           return Option.some(
             records.map((v) => Schema.decodeSync(RefinedTask)({ ...v, _tag: 'Task' }))
@@ -152,15 +157,10 @@ const DomainServiceLive = Layer.mergeAll(
 
 const TransactionalBoundary = TransactionalBoundaryLive(
   ProjectTransactionalBoundary,
-  ProjectUnitOfWork
+  ProjectDatabaseSession
 );
 
-const InfrastructureLayer = Layer.provideMerge(
-  TransactionalBoundary,
-  Layer.effect(ProjectUnitOfWork, jawn)
-);
-
-export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLayer);
+export const ApplicationLive = Layer.provideMerge(DomainServiceLive, TransactionalBoundary);
 
 const handler = Router.toHandlerUndecoded(router);
 
