@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  Dialect,
   DummyDriver,
   Kysely,
   SqliteAdapter,
@@ -8,53 +6,15 @@ import {
   SqliteQueryCompiler,
   type CompiledQuery
 } from 'kysely';
-import { Effect, Context, Layer, Ref, ConfigError, Option } from 'effect';
+import { Effect, Context, Layer, Ref, ConfigError } from 'effect';
 import { Database as SQLite, SQLiteError } from 'bun:sqlite';
-import { UnknownException } from 'effect/Cause';
 import { BunSqliteDialect } from 'kysely-bun-sqlite';
 import type { TransactionalBoundary } from '@hex-effect/core';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 
-// export const makeTransactionalBoundary = <
-//   TX extends Context.Tag<any, TransactionalBoundary>,
-//   UOW extends Context.Tag<any, UnitOfWork<any, SQLiteError>>
-// >(
-//   txBoundaryTag: TX,
-//   uowTag: UOW,
-//   getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
-// ): Layer.Layer<Context.Tag.Identifier<TX>, ConfigError.ConfigError, never> =>
-//   Layer.effect(
-//     txBoundaryTag,
-//     Effect.gen(function* () {
-//       const connectionString = yield* getConnectionString;
-//       const readonlyConnection = new SQLite(connectionString, { readonly: true });
-//       const writableConnection = new SQLite(connectionString);
-
-//       const uow = yield* uowTag;
-
-//       const q: TransactionalBoundary = {
-//         begin: (mode) =>
-//           Effect.gen(function* () {
-//             yield* Effect.log('begin called');
-//             // const dialect = new BunSqliteDialect({
-//             //   database: mode === 'readonly' ? readonlyConnection : writableConnection
-//             // });
-
-//             // yield* Ref.set(uow, Option.some(yield* UnitOfWorkLive(dialect)));
-//           }),
-//         commit: () =>
-//           Effect.gen(function* () {
-//             yield* Effect.log('commit called');
-//             // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-//           }),
-//         rollback: () => Effect.log('no op')
-//       };
-
-//       return q as Context.Tag.Service<TX>;
-//     })
-//   );
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TBoundaryTag = Context.Tag<any, TransactionalBoundary>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbSessionTag = Context.Tag<any, DatabaseSession<any, SQLiteError>>;
 
 export const TransactionalBoundaryLive = <
@@ -62,58 +22,54 @@ export const TransactionalBoundaryLive = <
   Session extends DbSessionTag
 >(
   TBoundary: Boundary,
-  DbSession: Session
+  DbSession: Session,
+  getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
 ): Layer.Layer<
   Context.Tag.Identifier<Boundary> | Context.Tag.Identifier<Session>,
   ConfigError.ConfigError,
   never
 > => {
-  const shmee = Layer.effect(
+  const sessionLayer = Layer.effect(
     DbSession,
     Effect.gen(function* () {
       const ref: Context.Tag.Service<DbSessionTag> = yield* Ref.make(NullDatabaseSession);
       return ref as Context.Tag.Service<Session>;
     })
   );
-  const q = Layer.effect(
+  const boundaryLayer = Layer.effect(
     TBoundary,
     Effect.gen(function* () {
+      const connectionString = yield* getConnectionString;
       const service: Context.Tag.Service<TBoundaryTag> = yield* makeTransactionalBoundary(
-        '' as any,
-        DbSession
+        DbSession,
+        connectionString
       );
       return service as Context.Tag.Service<Boundary>;
     })
   );
 
-  return q.pipe(Layer.provideMerge(shmee));
+  return boundaryLayer.pipe(Layer.provideMerge(sessionLayer));
 };
 
 const makeTransactionalBoundary = <Session extends DbSessionTag>(
-  getConnectionString: Effect.Effect<string, ConfigError.ConfigError>,
-  DbSession: Session
+  DbSession: Session,
+  connectionString: string
 ): Effect.Effect<
   Context.Tag.Service<TBoundaryTag>,
   ConfigError.ConfigError,
   Context.Tag.Identifier<Session>
 > =>
   Effect.gen(function* () {
-    const connectionString = yield* getConnectionString;
     const client = new SQLite(connectionString);
-
-    const uow = yield* DbSession;
-    yield* Effect.log(uow);
-    // const uow = yield* Effect.serviceFunctions(UnitOfWork).write();
+    const session = yield* DbSession;
+    const hotInstance = new Kysely({ dialect: new BunSqliteDialect({ database: client }) });
 
     const boundary: TransactionalBoundary = {
       begin: (mode) =>
         Effect.gen(function* () {
           yield* Effect.log('begin called');
-          // const dialect = new BunSqliteDialect({
-          //   database: mode === 'readonly' ? readonlyConnection : writableConnection
-          // });
 
-          // yield* Ref.set(uow, Option.some(yield* UnitOfWorkLive(dialect)));
+          yield* Ref.set(session, DatabaseSessionLive(hotInstance));
         }),
       commit: () =>
         Effect.gen(function* () {
