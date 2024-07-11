@@ -11,7 +11,8 @@ import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { createClient, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 
-type Modes = 'readonly' | 'batched' | 'serialized' | 'none';
+export { LibsqlDialect };
+
 
 export type TransactionalBoundary = {
   begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;

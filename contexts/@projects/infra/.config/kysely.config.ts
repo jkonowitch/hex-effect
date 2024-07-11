@@ -1,9 +1,8 @@
 import { defineConfig } from 'kysely-ctl';
-import { Database as SQLite } from 'bun:sqlite';
-import { BunSqliteDialect } from 'kysely-bun-sqlite';
+import { LibsqlDialect } from '@hex-effect/infra-kysely-libsql';
 
-const dialect = new BunSqliteDialect({
-  database: new SQLite(process.env.PROJECT_DB)
+const dialect = new LibsqlDialect({
+  url: process.env.PROJECT_DB!
 });
 
 export default defineConfig({
