@@ -1,19 +1,24 @@
-import { Kysely, type CompiledQuery } from 'kysely';
-import { Effect, Option, Ref } from 'effect';
-import { UnknownException } from 'effect/Cause';
+import type {
+  InsertResult,
+  Kysely,
+  CompiledQuery,
+  UpdateResult,
+  DeleteResult,
+  QueryResult
+} from 'kysely';
+import { Effect, Ref } from 'effect';
 
-export type UnitOfWork<DB, E> = Ref.Ref<
-  Option.Option<{
-    readonly write: (op: CompiledQuery) => Effect.Effect<void>;
-    readonly commit: () => Effect.Effect<void, E | UnknownException>;
-    readonly session: DatabaseSession<DB, E>;
-  }>
->;
+type ExcludedTypes = [InsertResult, UpdateResult, DeleteResult];
 
-export const getUnitOfWork = <DB, E>(uow: UnitOfWork<DB, E>) =>
-  Ref.get(uow).pipe(Effect.map(Option.getOrThrow));
+export type ReadonlyQuery<C> =
+  C extends CompiledQuery<infer T>
+    ? T extends ExcludedTypes[number]
+      ? never
+      : CompiledQuery<T>
+    : never;
 
-type DatabaseSession<DB, E> = {
-  direct: Kysely<DB>;
-  call: <A>(f: (db: Kysely<DB>) => Promise<A>) => Effect.Effect<A, E | UnknownException>;
-};
+export type DatabaseSession<DB, E> = Ref.Ref<{
+  readonly write: (op: CompiledQuery) => Effect.Effect<void, E>;
+  readonly read: <Q>(op: ReadonlyQuery<CompiledQuery<Q>>) => Effect.Effect<QueryResult<Q>, E>;
+  readonly queryBuilder: Kysely<DB>;
+}>;

@@ -12,22 +12,16 @@ import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
-import { getUnitOfWork, UnitOfWork } from '@hex-effect/infra';
+import { DatabaseSession } from '@hex-effect/infra';
 import { GetProjectWithTasks, router, ProjectTransactionalBoundary } from '@projects/application';
 import { Router } from '@effect/rpc';
 import type { SQLiteError } from 'bun:sqlite';
-import { makeTransactionalBoundary } from '@hex-effect/infra-bun-sqlite-kysely';
+import { TransactionalBoundaryLive } from '@hex-effect/infra-bun-sqlite-kysely';
 
 class ProjectUnitOfWork extends Context.Tag('ProjectUnitOfWork')<
   ProjectUnitOfWork,
-  UnitOfWork<DB, SQLiteError>
+  DatabaseSession<DB, SQLiteError>
 >() {}
-
-type Q<S> = S extends Ref.Ref<infer V> ? V : never;
-
-type R = Option.Option.Value<Q<UnitOfWork<DB, SQLiteError>>>;
-
-const jawn = Ref.make(Option.none<R>());
 
 /**
  * Application and Domain Service Implementations
@@ -156,10 +150,9 @@ const DomainServiceLive = Layer.mergeAll(
   ProjectDomainPublisherLive
 );
 
-const TransactionalBoundary = makeTransactionalBoundary(
+const TransactionalBoundary = TransactionalBoundaryLive(
   ProjectTransactionalBoundary,
-  ProjectUnitOfWork,
-  Config.string('PROJECT_DB')
+  ProjectUnitOfWork
 );
 
 const InfrastructureLayer = Layer.provideMerge(
