@@ -51,6 +51,10 @@ export const TransactionalBoundaryLive = <
   return boundaryLayer.pipe(Layer.provideMerge(sessionLayer));
 };
 
+const isSupportedMode = (s: string): s is 'read-lazy' | 'write-lazy' => {
+  return s === 'read-lazy' || s === 'write-lazy';
+};
+
 const makeTransactionalBoundary = <Session extends DbSessionTag>(
   DbSession: Session,
   connectionString: string
@@ -67,6 +71,9 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
     const boundary: TransactionalBoundary = {
       begin: (mode) =>
         Effect.gen(function* () {
+          if (!isSupportedMode(mode))
+            yield* Effect.dieMessage(`${mode} mode not supported with this driver`);
+
           yield* Effect.log('begin called');
 
           yield* Ref.set(session, DatabaseSessionLive(hotInstance));
