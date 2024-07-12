@@ -158,7 +158,6 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
             })
           )
         ),
-
       rollback: () =>
         Ref.get(transactionSession).pipe(
           Effect.map(
