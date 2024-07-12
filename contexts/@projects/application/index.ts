@@ -1,6 +1,6 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import type { TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
+import type { Modes, TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
 import {
   Project,
   ProjectDomainEvents,
@@ -83,7 +83,7 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary('batched')) satisfies RequestHandler<CreateProject>;
+  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   pipe(
@@ -92,7 +92,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     Effect.flatMap((project) => project.addTask(description)),
     Effect.tap(Effect.serviceFunctions(TaskRepository).save),
     Effect.map(get('id')),
-    withTransactionalBoundary('batched')
+    withTransactionalBoundary()
   ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
@@ -105,7 +105,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
     );
     yield* Effect.log('modified task', task);
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary('batched')) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -115,7 +115,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   ).pipe(
     Effect.map(([project, tasks]) => Option.all({ project, tasks })),
     succeedOrNotFound(),
-    withTransactionalBoundary()
+    withTransactionalBoundary('None')
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
 const processEvent = ({ event }: ProcessEvent) =>
@@ -128,7 +128,7 @@ const processEvent = ({ event }: ProcessEvent) =>
       Match.exhaustive
     )
     // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary('batched')) satisfies RequestHandler<ProcessEvent>;
+    .pipe(withTransactionalBoundary()) satisfies RequestHandler<ProcessEvent>;
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
@@ -154,9 +154,7 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
     );
 }
 
-function withTransactionalBoundary(
-  mode: Parameters<ProjectTransactionalBoundary['Type']['begin']>[0] = 'readonly'
-) {
+function withTransactionalBoundary(mode: Modes = 'Batched') {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
   ): Effect.Effect<A, E, ProjectTransactionalBoundary | Exclude<R, Scope.Scope>> =>

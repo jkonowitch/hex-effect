@@ -131,11 +131,10 @@ export class LibsqlConnection implements DatabaseConnection {
     if (this.#transaction) {
       throw new Error('Transaction already in progress');
     }
-
-    if (isolationLevel === 'snapshot') {
-      this.#transaction = await this.client.transaction('read');
-    } else if (isolationLevel === 'serializable') {
+    if (isolationLevel === 'serializable') {
       this.#transaction = await this.client.transaction('write');
+    } else if (isolationLevel === 'snapshot') {
+      this.#transaction = await this.client.transaction('read');
     } else if (typeof isolationLevel === 'undefined') {
       this.#transaction = await this.client.transaction('deferred');
     } else {

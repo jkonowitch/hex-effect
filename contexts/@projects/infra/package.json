@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "generate-types": "kysely-codegen --out-file persistence/schema.ts"
+    "generate-types": "kysely-codegen --dialect libsql --out-file persistence/schema.ts"
   },
   "devDependencies": {
+    "@libsql/kysely-libsql": "^0.4.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "dotenv-cli": "^7.4.2",

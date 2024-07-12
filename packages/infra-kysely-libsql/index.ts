@@ -6,13 +6,47 @@ import {
   SqliteQueryCompiler,
   type CompiledQuery
 } from 'kysely';
-import { Effect, Context, Layer, Ref, ConfigError, Scope } from 'effect';
+import { Effect, Context, Layer, Ref, ConfigError, Scope, Data, Match } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
-import { createClient, LibsqlError } from '@libsql/client';
+import { createClient, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 export { LibsqlDialect };
 
+export type Modes = TransactionSession['_tag'];
+
+type DBTX = {
+  commit: Effect.Effect<void>;
+  rollback: Effect.Effect<void>;
+  tx: Kysely<unknown>;
+};
+
+const initiateTransaction = (hotInstance: Kysely<unknown>) =>
+  Effect.async<DBTX>((resume) => {
+    const txSuspend = Promise.withResolvers();
+
+    const operation = hotInstance
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async function (tx) {
+        const rollback = Effect.zipRight(
+          Effect.sync(() => txSuspend.reject(new RollbackError())),
+          Effect.tryPromise({
+            try: () => operation,
+            catch: (e) => (RollbackError.isRollback(e) ? e : new Error(`${e}`))
+          })
+        ).pipe(Effect.catchTag('RollbackError', Effect.ignore), Effect.orDie);
+
+        const commit = Effect.zipRight(
+          Effect.sync(() => txSuspend.resolve()),
+          Effect.promise(() => operation)
+        );
+
+        resume(Effect.succeed({ rollback, commit, tx }));
+
+        await txSuspend.promise;
+      });
+  });
 
 export type TransactionalBoundary = {
   begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
@@ -59,7 +93,20 @@ export const TransactionalBoundaryLive = <
   return boundaryLayer.pipe(Layer.provideMerge(sessionLayer));
 };
 
-type TransactionSession = { writes: ReadonlyArray<CompiledQuery<unknown>>; mode: Modes };
+class RollbackError extends Data.TaggedError('RollbackError') {
+  static isRollback(e: unknown): e is RollbackError {
+    return e instanceof this && e._tag === 'RollbackError';
+  }
+}
+
+type TransactionSession = Data.TaggedEnum<{
+  Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  None: {};
+  Serialized: { tx: DBTX };
+}>;
+
+const { None, Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
 
 const makeTransactionalBoundary = <Session extends DbSessionTag>(
   DbSession: Session,
@@ -74,22 +121,54 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
     const session = yield* DbSession;
     const hotInstance = new Kysely({ dialect: new LibsqlDialect({ client }) });
 
-    let transactionSession: Ref.Ref<TransactionSession>;
+    const transactionSession = yield* Ref.make<TransactionSession>(None());
 
     const boundary: TransactionalBoundary = {
       begin: (mode) =>
-        Effect.gen(function* () {
-          yield* Effect.log('begin called');
-          transactionSession = yield* Ref.make<TransactionSession>({ writes: [], mode });
-          yield* Ref.set(session, DatabaseSessionLive(hotInstance));
-        }),
+        Match.value(mode).pipe(
+          Match.when('Batched', () =>
+            Effect.all([
+              Ref.set(session, DatabaseSessionBatched(hotInstance, transactionSession)),
+              Ref.set(transactionSession, Batched({ writes: [] }))
+            ])
+          ),
+          Match.when('Serialized', () =>
+            Effect.gen(function* () {
+              const tx = yield* initiateTransaction(hotInstance);
+              yield* Ref.set(transactionSession, Serialized({ tx }));
+              yield* Ref.set(session, DatabaseSessionLive(tx.tx));
+            })
+          ),
+          Match.when('None', () => Ref.set(session, DatabaseSessionLive(hotInstance))),
+          Match.exhaustive
+        ),
       commit: () =>
-        Effect.gen(function* () {
-          yield* Effect.log('commit called');
-          yield* Ref.get(transactionSession).pipe(Effect.flatMap(Effect.log));
-          // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-        }),
-      rollback: () => Effect.log('no op')
+        // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
+        Ref.get(transactionSession).pipe(
+          Effect.flatMap(
+            $match({
+              None: () => Effect.void,
+              Serialized: ({ tx }) => tx.commit,
+              Batched: ({ writes }) =>
+                Effect.promise(() =>
+                  client.batch(
+                    writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
+                  )
+                )
+            })
+          )
+        ),
+
+      rollback: () =>
+        Ref.get(transactionSession).pipe(
+          Effect.map(
+            $match({
+              None: () => Effect.void,
+              Serialized: ({ tx }) => tx.rollback,
+              Batched: (a) => Ref.set(transactionSession, { ...a, writes: [] })
+            })
+          )
+        )
     };
 
     return boundary;
@@ -121,6 +200,23 @@ const DatabaseSessionLive = (
     },
     write(op) {
       return Effect.promise(() => hotInstance.executeQuery(op));
+    },
+    queryBuilder: coldInstance
+  };
+};
+
+const DatabaseSessionBatched = (
+  hotInstance: Kysely<unknown>,
+  transactionSession: Ref.Ref<TransactionSession>
+): RefValue<DatabaseSession<unknown, LibsqlError>> => {
+  return {
+    read<Q>(op: ReadonlyQuery<CompiledQuery<Q>>) {
+      return Effect.promise(() => hotInstance.executeQuery(op));
+    },
+    write(op) {
+      return Ref.update(transactionSession, (a) =>
+        $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
+      );
     },
     queryBuilder: coldInstance
   };
