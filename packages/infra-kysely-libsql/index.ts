@@ -90,11 +90,11 @@ export const TransactionalBoundaryLive = <
   );
   const boundaryLayer = Layer.effect(
     TBoundary,
-    Effect.gen(function* () {
-      const service: Context.Tag.Service<TBoundaryTag> =
-        yield* makeTransactionalBoundary(DbSession);
-      return service as Context.Tag.Service<Boundary>;
-    })
+    makeTransactionalBoundary(DbSession) as Effect.Effect<
+      Context.Tag.Service<Boundary>,
+      never,
+      Context.Tag.Identifier<Session>
+    >
   );
 
   return boundaryLayer.pipe(
