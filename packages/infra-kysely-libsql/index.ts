@@ -6,9 +6,9 @@ import {
   SqliteQueryCompiler,
   type CompiledQuery
 } from 'kysely';
-import { Effect, Context, Layer, Ref, ConfigError, Scope, Data, Match } from 'effect';
+import { Effect, Context, Layer, Ref, ConfigError, Scope, Data, Match, Option } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
-import { createClient, InValue, LibsqlError } from '@libsql/client';
+import { Client, createClient, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 export { LibsqlDialect };
@@ -29,12 +29,10 @@ type DBTX = {
 
 type TransactionSession = Data.TaggedEnum<{
   Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  None: {};
   Serialized: { tx: DBTX };
 }>;
 
-const { None, Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
+const { Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
 
 const initiateTransaction = (hotInstance: Kysely<unknown>) =>
   Effect.async<DBTX>((resume) => {
@@ -83,23 +81,26 @@ export const TransactionalBoundaryLive = <
   const sessionLayer = Layer.effect(
     DbSession,
     Effect.gen(function* () {
-      const ref: Context.Tag.Service<DbSessionTag> = yield* Ref.make(NullDatabaseSession);
+      const { client } = yield* DatabaseConnection;
+      const ref: Context.Tag.Service<DbSessionTag> = yield* Ref.make(
+        DatabaseSessionLive(new Kysely({ dialect: new LibsqlDialect({ client }) }))
+      );
       return ref as Context.Tag.Service<Session>;
     })
   );
   const boundaryLayer = Layer.effect(
     TBoundary,
     Effect.gen(function* () {
-      const connectionString = yield* getConnectionString;
-      const service: Context.Tag.Service<TBoundaryTag> = yield* makeTransactionalBoundary(
-        DbSession,
-        connectionString
-      );
+      const service: Context.Tag.Service<TBoundaryTag> =
+        yield* makeTransactionalBoundary(DbSession);
       return service as Context.Tag.Service<Boundary>;
     })
   );
 
-  return boundaryLayer.pipe(Layer.provideMerge(sessionLayer));
+  return boundaryLayer.pipe(
+    Layer.provideMerge(sessionLayer),
+    Layer.provide(DatabaseConnectionLive(getConnectionString))
+  );
 };
 
 class RollbackError extends Data.TaggedError('RollbackError') {
@@ -108,20 +109,35 @@ class RollbackError extends Data.TaggedError('RollbackError') {
   }
 }
 
+class DatabaseConnection extends Context.Tag('DatabaseConnection')<
+  DatabaseConnection,
+  { client: Client }
+>() {}
+
+const DatabaseConnectionLive = (
+  getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
+) =>
+  Layer.scoped(
+    DatabaseConnection,
+    Effect.gen(function* () {
+      const connectionString = yield* getConnectionString;
+      const client = createClient({ url: connectionString });
+      yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
+      return {
+        client
+      };
+    })
+  );
+
 const makeTransactionalBoundary = <Session extends DbSessionTag>(
-  DbSession: Session,
-  connectionString: string
-): Effect.Effect<
-  Context.Tag.Service<TBoundaryTag>,
-  ConfigError.ConfigError,
-  Context.Tag.Identifier<Session>
-> =>
+  DbSession: Session
+): Effect.Effect<Context.Tag.Service<TBoundaryTag>, never, Context.Tag.Identifier<Session>> =>
   Effect.gen(function* () {
-    const client = createClient({ url: connectionString });
+    const { client } = yield* DatabaseConnection;
     const session = yield* DbSession;
     const hotInstance = new Kysely({ dialect: new LibsqlDialect({ client }) });
 
-    const transactionSession = yield* Ref.make<TransactionSession>(None());
+    const transactionSession = yield* Ref.make<Option.Option<TransactionSession>>(None());
 
     const boundary: TransactionalBoundary = {
       begin: (mode) =>
@@ -129,25 +145,24 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
           Match.when('Batched', () =>
             Effect.all([
               Ref.set(session, DatabaseSessionBatched(hotInstance, transactionSession)),
-              Ref.set(transactionSession, Batched({ writes: [] }))
+              Ref.set(transactionSession, Option.some(Batched({ writes: [] })))
             ])
           ),
           Match.when('Serialized', () =>
             Effect.gen(function* () {
               const tx = yield* initiateTransaction(hotInstance);
-              yield* Ref.set(transactionSession, Serialized({ tx }));
+              yield* Ref.set(transactionSession, Option.some(Serialized({ tx })));
               yield* Ref.set(session, DatabaseSessionLive(tx.tx));
             })
           ),
-          Match.when('None', () => Ref.set(session, DatabaseSessionLive(hotInstance))),
           Match.exhaustive
         ),
       commit: () =>
         // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
         Ref.get(transactionSession).pipe(
+          Effect.map(Option.getOrThrow),
           Effect.flatMap(
             $match({
-              None: () => Effect.void,
               Serialized: ({ tx }) => tx.commit,
               Batched: ({ writes }) =>
                 Effect.promise(() =>
@@ -160,6 +175,7 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
         ),
       rollback: () =>
         Ref.get(transactionSession).pipe(
+          Effect.map(Option.getOrThrow),
           Effect.map(
             $match({
               None: () => Effect.void,
@@ -183,12 +199,6 @@ const coldInstance = new Kysely<unknown>({
     createQueryCompiler: () => new SqliteQueryCompiler()
   }
 });
-
-const NullDatabaseSession: RefValue<DatabaseSession<unknown, LibsqlError>> = {
-  read: () => Effect.dieMessage('TransactionBoundary#begin not called!'),
-  write: () => Effect.dieMessage('TransactionBoundary#begin not called!'),
-  queryBuilder: coldInstance
-};
 
 const DatabaseSessionLive = (
   hotInstance: Kysely<unknown>
