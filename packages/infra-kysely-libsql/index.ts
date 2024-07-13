@@ -15,11 +15,26 @@ export { LibsqlDialect };
 
 export type Modes = TransactionSession['_tag'];
 
+export type TransactionalBoundary = {
+  begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
+  commit(): Effect.Effect<void, never, Scope.Scope>;
+  rollback(): Effect.Effect<void>;
+};
+
 type DBTX = {
   commit: Effect.Effect<void>;
   rollback: Effect.Effect<void>;
   tx: Kysely<unknown>;
 };
+
+type TransactionSession = Data.TaggedEnum<{
+  Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  None: {};
+  Serialized: { tx: DBTX };
+}>;
+
+const { None, Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
 
 const initiateTransaction = (hotInstance: Kysely<unknown>) =>
   Effect.async<DBTX>((resume) => {
@@ -47,12 +62,6 @@ const initiateTransaction = (hotInstance: Kysely<unknown>) =>
         await txSuspend.promise;
       });
   });
-
-export type TransactionalBoundary = {
-  begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
-  commit(): Effect.Effect<void, never, Scope.Scope>;
-  rollback(): Effect.Effect<void>;
-};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TBoundaryTag = Context.Tag<any, TransactionalBoundary>;
@@ -98,15 +107,6 @@ class RollbackError extends Data.TaggedError('RollbackError') {
     return e instanceof this && e._tag === 'RollbackError';
   }
 }
-
-type TransactionSession = Data.TaggedEnum<{
-  Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  None: {};
-  Serialized: { tx: DBTX };
-}>;
-
-const { None, Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
 
 const makeTransactionalBoundary = <Session extends DbSessionTag>(
   DbSession: Session,
