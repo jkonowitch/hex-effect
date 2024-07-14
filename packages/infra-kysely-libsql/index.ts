@@ -6,7 +6,7 @@ import {
   SqliteQueryCompiler,
   type CompiledQuery
 } from 'kysely';
-import { Effect, Context, Layer, Ref, ConfigError, Scope, Data, Match, Option } from 'effect';
+import { Effect, Context, Layer, Ref, ConfigError, Scope, Data, Match, Option, pipe } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { Client, createClient, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
@@ -81,9 +81,9 @@ export const TransactionalBoundaryLive = <
   const sessionLayer = Layer.effect(
     DbSession,
     Effect.gen(function* () {
-      const { client } = yield* DatabaseConnection;
+      const { hotInstance } = yield* DatabaseConnection;
       const ref: Context.Tag.Service<DbSessionTag> = yield* Ref.make(
-        DatabaseSessionLive(new Kysely({ dialect: new LibsqlDialect({ client }) }))
+        DatabaseSessionLive(hotInstance)
       );
       return ref as Context.Tag.Service<Session>;
     })
@@ -111,7 +111,7 @@ class RollbackError extends Data.TaggedError('RollbackError') {
 
 class DatabaseConnection extends Context.Tag('DatabaseConnection')<
   DatabaseConnection,
-  { client: Client }
+  { client: Client; hotInstance: Kysely<unknown> }
 >() {}
 
 const DatabaseConnectionLive = (
@@ -124,7 +124,8 @@ const DatabaseConnectionLive = (
       const client = createClient({ url: connectionString });
       yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
       return {
-        client
+        client,
+        hotInstance: new Kysely({ dialect: new LibsqlDialect({ client }) })
       };
     })
   );
@@ -133,20 +134,27 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
   DbSession: Session
 ): Effect.Effect<Context.Tag.Service<TBoundaryTag>, never, Context.Tag.Identifier<Session>> =>
   Effect.gen(function* () {
-    const { client } = yield* DatabaseConnection;
+    const { client, hotInstance } = yield* DatabaseConnection;
     const session = yield* DbSession;
-    const hotInstance = new Kysely({ dialect: new LibsqlDialect({ client }) });
-
-    const transactionSession = yield* Ref.make<Option.Option<TransactionSession>>(None());
+    const transactionSession = yield* Ref.make(Option.none<TransactionSession>());
 
     const boundary: TransactionalBoundary = {
       begin: (mode) =>
         Match.value(mode).pipe(
           Match.when('Batched', () =>
-            Effect.all([
-              Ref.set(session, DatabaseSessionBatched(hotInstance, transactionSession)),
-              Ref.set(transactionSession, Option.some(Batched({ writes: [] })))
-            ])
+            Effect.gen(function* () {
+              yield* Ref.set(transactionSession, Option.some(Batched({ writes: [] })));
+              Ref.update(session, (a) => ({
+                ...a,
+                write: (op) =>
+                  Ref.update(transactionSession, (session) => {
+                    const q = Option.getOrThrow(session);
+                    return $is('Batched')(q)
+                      ? Option.some({ ...q, writes: [...q.writes, op] })
+                      : Option.some(q);
+                  })
+              }));
+            })
           ),
           Match.when('Serialized', () =>
             Effect.gen(function* () {
@@ -178,9 +186,8 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
           Effect.map(Option.getOrThrow),
           Effect.map(
             $match({
-              None: () => Effect.void,
               Serialized: ({ tx }) => tx.rollback,
-              Batched: (a) => Ref.set(transactionSession, { ...a, writes: [] })
+              Batched: (a) => Ref.set(transactionSession, Option.some({ ...a, writes: [] }))
             })
           )
         )
@@ -209,23 +216,6 @@ const DatabaseSessionLive = (
     },
     write(op) {
       return Effect.promise(() => hotInstance.executeQuery(op));
-    },
-    queryBuilder: coldInstance
-  };
-};
-
-const DatabaseSessionBatched = (
-  hotInstance: Kysely<unknown>,
-  transactionSession: Ref.Ref<TransactionSession>
-): RefValue<DatabaseSession<unknown, LibsqlError>> => {
-  return {
-    read<Q>(op: ReadonlyQuery<CompiledQuery<Q>>) {
-      return Effect.promise(() => hotInstance.executeQuery(op));
-    },
-    write(op) {
-      return Ref.update(transactionSession, (a) =>
-        $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
-      );
     },
     queryBuilder: coldInstance
   };
