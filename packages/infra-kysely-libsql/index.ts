@@ -82,9 +82,11 @@ export const TransactionalBoundaryLive = <
 > => {
   const sessionLayer = Layer.effect(
     DbSession,
-    DatabaseConnection.pipe(
-      Effect.map(({ db }) => DatabaseSessionLive(db) as Context.Tag.Service<Session>)
-    )
+    Effect.gen(function* () {
+      const { db } = yield* DatabaseConnection;
+      const ref: Context.Tag.Service<DbSessionTag> = yield* Ref.make(DatabaseSessionLive(db));
+      return ref as Context.Tag.Service<Session>;
+    })
   );
   const boundaryLayer = Layer.effect(
     TBoundary,

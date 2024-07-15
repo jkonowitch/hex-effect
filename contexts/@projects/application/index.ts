@@ -114,8 +114,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     { concurrent: true }
   ).pipe(
     Effect.map(([project, tasks]) => Option.all({ project, tasks })),
-    succeedOrNotFound(),
-    withTransactionalBoundary('None')
+    succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
 const processEvent = ({ event }: ProcessEvent) =>
