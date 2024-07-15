@@ -15,12 +15,22 @@ import type { DB } from './persistence/schema.js';
 import { DatabaseSession } from '@hex-effect/infra';
 import { GetProjectWithTasks, router, ProjectTransactionalBoundary } from '@projects/application';
 import { Router } from '@effect/rpc';
-import type { LibsqlError } from '@libsql/client';
-import { TransactionalBoundaryLive } from '@hex-effect/infra-kysely-libsql';
+import { createClient, type Client, type LibsqlError } from '@libsql/client';
+import {
+  createDatabaseSession,
+  LibsqlDialect,
+  makeTransactionalBoundary
+} from '@hex-effect/infra-kysely-libsql';
+import { Kysely } from 'kysely';
 
 class ProjectDatabaseSession extends Context.Tag('ProjectDatabaseSession')<
   ProjectDatabaseSession,
   DatabaseSession<DB, LibsqlError>
+>() {}
+
+class ProjectDatabaseConnection extends Context.Tag('ProjectDatabaseConnection')<
+  ProjectDatabaseConnection,
+  { client: Client; db: Kysely<DB> }
 >() {}
 
 /**
@@ -155,13 +165,43 @@ const DomainServiceLive = Layer.mergeAll(
   ProjectDomainPublisherLive
 );
 
-const TransactionalBoundary = TransactionalBoundaryLive(
-  ProjectTransactionalBoundary,
-  ProjectDatabaseSession,
-  Config.string('PROJECT_DB')
+const DatabaseConnectionLive = Layer.scoped(
+  ProjectDatabaseConnection,
+  Effect.gen(function* () {
+    const connectionString = yield* Config.string('PROJECT_DB');
+    const client = createClient({ url: connectionString });
+    yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
+    return {
+      client,
+      db: new Kysely<DB>({ dialect: new LibsqlDialect({ client }) })
+    };
+  })
 );
 
-export const ApplicationLive = Layer.provideMerge(DomainServiceLive, TransactionalBoundary);
+const DatabaseSessionLive = Layer.effect(
+  ProjectDatabaseSession,
+  Effect.gen(function* () {
+    const { db } = yield* ProjectDatabaseConnection;
+    return yield* Ref.make(createDatabaseSession(db));
+  })
+);
+
+const TransactionalBoundaryLive = Layer.effect(
+  ProjectTransactionalBoundary,
+  Effect.gen(function* () {
+    const conn = yield* ProjectDatabaseConnection;
+    const sesh = yield* ProjectDatabaseSession;
+    const s = yield* makeTransactionalBoundary(conn, sesh);
+    return s;
+  })
+);
+
+const InfrastructureLive = TransactionalBoundaryLive.pipe(
+  Layer.provideMerge(DatabaseSessionLive),
+  Layer.provideMerge(DatabaseConnectionLive)
+);
+
+export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
 
 const handler = Router.toHandlerUndecoded(router);
 

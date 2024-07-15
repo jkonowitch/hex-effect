@@ -4,11 +4,12 @@ import {
   SqliteAdapter,
   SqliteIntrospector,
   SqliteQueryCompiler,
+  Transaction,
   type CompiledQuery
 } from 'kysely';
-import { Effect, Context, Layer, Ref, ConfigError, Scope, Data, Match } from 'effect';
+import { Effect, Ref, Scope, Data, Match } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
-import { Client, createClient, InValue, LibsqlError } from '@libsql/client';
+import { Client, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 export { LibsqlDialect };
@@ -24,7 +25,8 @@ export type TransactionalBoundary = {
 type DBTX = {
   commit: Effect.Effect<void>;
   rollback: Effect.Effect<void>;
-  tx: Kysely<unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: Transaction<any>;
 };
 
 type TransactionSession = Data.TaggedEnum<{
@@ -36,7 +38,7 @@ type TransactionSession = Data.TaggedEnum<{
 
 const { Batched, Serialized, None, $match, $is } = Data.taggedEnum<TransactionSession>();
 
-const initiateTransaction = (db: Kysely<unknown>) =>
+const initiateTransaction = <DB>(db: Kysely<DB>) =>
   Effect.async<DBTX>((resume) => {
     const txSuspend = Promise.withResolvers();
 
@@ -63,79 +65,18 @@ const initiateTransaction = (db: Kysely<unknown>) =>
       });
   });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TBoundaryTag = Context.Tag<any, TransactionalBoundary>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DbSessionTag = Context.Tag<any, DatabaseSession<any, LibsqlError>>;
-
-export const TransactionalBoundaryLive = <
-  Boundary extends TBoundaryTag,
-  Session extends DbSessionTag
->(
-  TBoundary: Boundary,
-  DbSession: Session,
-  getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
-): Layer.Layer<
-  Context.Tag.Identifier<Boundary> | Context.Tag.Identifier<Session>,
-  ConfigError.ConfigError,
-  never
-> => {
-  const sessionLayer = Layer.effect(
-    DbSession,
-    Effect.gen(function* () {
-      const { db } = yield* DatabaseConnection;
-      const ref: Context.Tag.Service<DbSessionTag> = yield* Ref.make(DatabaseSessionLive(db));
-      return ref as Context.Tag.Service<Session>;
-    })
-  );
-  const boundaryLayer = Layer.effect(
-    TBoundary,
-    makeTransactionalBoundary(DbSession) as Effect.Effect<
-      Context.Tag.Service<Boundary>,
-      never,
-      Context.Tag.Identifier<Session>
-    >
-  );
-
-  return boundaryLayer.pipe(
-    Layer.provideMerge(sessionLayer),
-    Layer.provide(DatabaseConnectionLive(getConnectionString))
-  );
-};
-
 class RollbackError extends Data.TaggedError('RollbackError') {
   static isRollback(e: unknown): e is RollbackError {
     return e instanceof this && e._tag === 'RollbackError';
   }
 }
 
-class DatabaseConnection extends Context.Tag('DatabaseConnection')<
-  DatabaseConnection,
-  { client: Client; db: Kysely<unknown> }
->() {}
-
-const DatabaseConnectionLive = (
-  getConnectionString: Effect.Effect<string, ConfigError.ConfigError>
+export const makeTransactionalBoundary = <DB>(
+  connection: { client: Client; db: Kysely<DB> },
+  session: DatabaseSession<DB, LibsqlError>
 ) =>
-  Layer.scoped(
-    DatabaseConnection,
-    Effect.gen(function* () {
-      const connectionString = yield* getConnectionString;
-      const client = createClient({ url: connectionString });
-      yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
-      return {
-        client,
-        db: new Kysely({ dialect: new LibsqlDialect({ client }) })
-      };
-    })
-  );
-
-const makeTransactionalBoundary = <Session extends DbSessionTag>(
-  DBSession: Session
-): Effect.Effect<Context.Tag.Service<TBoundaryTag>, never, Context.Tag.Identifier<Session>> =>
   Effect.gen(function* () {
-    const { client, db } = yield* DatabaseConnection;
-    const databaseSession = yield* DBSession;
+    const { client, db } = connection;
     const transactionSession = yield* Ref.make<TransactionSession>(None());
 
     const boundary: TransactionalBoundary = {
@@ -144,14 +85,14 @@ const makeTransactionalBoundary = <Session extends DbSessionTag>(
           Match.when('Batched', () =>
             Effect.gen(function* () {
               yield* Ref.set(transactionSession, Batched({ writes: [] }));
-              yield* Ref.set(databaseSession, DatabaseSessionBatched(db, transactionSession));
+              yield* Ref.set(session, createBatchedDatabaseSession(db, transactionSession));
             })
           ),
           Match.when('Serialized', () =>
             Effect.gen(function* () {
               const tx = yield* initiateTransaction(db);
               yield* Ref.set(transactionSession, Serialized({ tx }));
-              yield* Ref.set(databaseSession, DatabaseSessionLive(tx.tx));
+              yield* Ref.set(session, createDatabaseSession(tx.tx));
             })
           ),
           Match.exhaustive
@@ -198,9 +139,9 @@ const coldInstance = new Kysely<unknown>({
 
 type RefValue<T> = T extends Ref.Ref<infer V> ? V : never;
 
-const DatabaseSessionLive = (
-  db: Kysely<unknown>
-): RefValue<DatabaseSession<unknown, LibsqlError>> => {
+export const createDatabaseSession = <DB>(
+  db: Kysely<DB>
+): RefValue<DatabaseSession<DB, LibsqlError>> => {
   return {
     read<Q>(op: ReadonlyQuery<CompiledQuery<Q>>) {
       return Effect.promise(() => db.executeQuery(op));
@@ -208,16 +149,16 @@ const DatabaseSessionLive = (
     write(op) {
       return Effect.promise(() => db.executeQuery(op));
     },
-    queryBuilder: coldInstance
+    queryBuilder: coldInstance as Kysely<DB>
   };
 };
 
-const DatabaseSessionBatched = (
-  hotInstance: Kysely<unknown>,
+const createBatchedDatabaseSession = <DB>(
+  hotInstance: Kysely<DB>,
   transactionSession: Ref.Ref<TransactionSession>
-): RefValue<DatabaseSession<unknown, LibsqlError>> => {
+): RefValue<DatabaseSession<DB, LibsqlError>> => {
   return {
-    ...DatabaseSessionLive(hotInstance),
+    ...createDatabaseSession(hotInstance),
     write(op) {
       return Ref.update(transactionSession, (a) =>
         $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
