@@ -180,20 +180,14 @@ const DatabaseConnectionLive = Layer.scoped(
 
 const DatabaseSessionLive = Layer.effect(
   ProjectDatabaseSession,
-  Effect.gen(function* () {
-    const { db } = yield* ProjectDatabaseConnection;
-    return yield* Ref.make(createDatabaseSession(db));
-  })
+  ProjectDatabaseConnection.pipe(Effect.andThen((conn) => Ref.make(createDatabaseSession(conn.db))))
 );
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
-  Effect.gen(function* () {
-    const conn = yield* ProjectDatabaseConnection;
-    const sesh = yield* ProjectDatabaseSession;
-    const s = yield* makeTransactionalBoundary(conn, sesh);
-    return s;
-  })
+  Effect.zip(ProjectDatabaseConnection, ProjectDatabaseSession).pipe(
+    Effect.andThen(([conn, session]) => makeTransactionalBoundary(conn, session))
+  )
 );
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
@@ -206,7 +200,7 @@ export const ApplicationLive = Layer.provideMerge(DomainServiceLive, Infrastruct
 const handler = Router.toHandlerUndecoded(router);
 
 const res = await handler(
-  GetProjectWithTasks.make({ projectId: ProjectId.make('5shj6M008O2Z0TlUVt8f0') })
+  GetProjectWithTasks.make({ projectId: ProjectId.make('c7KPGnS7N6XRUW4hGiCQr') })
 ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
 
 console.log(res);
