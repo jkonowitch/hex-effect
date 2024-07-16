@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Option, Ref, Config, PubSub } from 'effect';
+import { Effect, Context, Layer, Option, Ref, Config, PubSub, Queue } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
@@ -12,7 +12,7 @@ import { Schema } from '@effect/schema';
 import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
-import { DatabaseSession } from '@hex-effect/infra';
+import type { DatabaseSession as DatabaseSessionService } from '@hex-effect/infra';
 import {
   GetProjectWithTasks,
   router,
@@ -29,13 +29,13 @@ import {
 } from '@hex-effect/infra-kysely-libsql';
 import { Kysely } from 'kysely';
 
-class ProjectDatabaseSession extends Context.Tag('ProjectDatabaseSession')<
-  ProjectDatabaseSession,
-  DatabaseSession<DB, LibsqlError>
+class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
+  DatabaseSession,
+  DatabaseSessionService<DB, LibsqlError>
 >() {}
 
-class ProjectDatabaseConnection extends Context.Tag('ProjectDatabaseConnection')<
-  ProjectDatabaseConnection,
+class DatabaseConnection extends Context.Tag('ProjectDatabaseConnection')<
+  DatabaseConnection,
   { client: Client; db: Kysely<DB> }
 >() {}
 
@@ -45,7 +45,7 @@ class ProjectDatabaseConnection extends Context.Tag('ProjectDatabaseConnection')
 
 const ProjectRepositoryLive = Layer.effect(
   ProjectRepository,
-  ProjectDatabaseSession.pipe(
+  DatabaseSession.pipe(
     Effect.map((session) => ({
       nextId() {
         return Effect.succeed(ProjectId.make(nanoid()));
@@ -99,7 +99,7 @@ const RefinedTask = Schema.Struct({
 
 const TaskRepositoryLive = Layer.effect(
   TaskRepository,
-  ProjectDatabaseSession.pipe(
+  DatabaseSession.pipe(
     Effect.map((session) => ({
       nextId() {
         return Effect.succeed(TaskId.make(nanoid()));
@@ -172,7 +172,7 @@ const DomainServiceLive = Layer.mergeAll(
 );
 
 const DatabaseConnectionLive = Layer.scoped(
-  ProjectDatabaseConnection,
+  DatabaseConnection,
   Effect.gen(function* () {
     const connectionString = yield* Config.string('PROJECT_DB');
     const client = createClient({ url: connectionString });
@@ -185,8 +185,8 @@ const DatabaseConnectionLive = Layer.scoped(
 );
 
 const DatabaseSessionLive = Layer.effect(
-  ProjectDatabaseSession,
-  ProjectDatabaseConnection.pipe(Effect.andThen(({ db }) => Ref.make(createDatabaseSession(db))))
+  DatabaseSession,
+  DatabaseConnection.pipe(Effect.andThen(({ db }) => Ref.make(createDatabaseSession(db))))
 );
 
 class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<
@@ -199,12 +199,24 @@ const TransactionEventsLive = Layer.effect(
   PubSub.sliding<keyof TransactionalBoundary>(10)
 );
 
+const Kralf = Layer.scopedDiscard(
+  Effect.gen(function* () {
+    const pub = yield* TransactionEvents;
+
+    const dequeue = yield* PubSub.subscribe(pub);
+
+    yield* Queue.take(dequeue)
+      .pipe(Effect.andThen(Effect.log), Effect.forever)
+      .pipe(Effect.forkDaemon);
+  })
+);
+
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
-  Effect.all([ProjectDatabaseConnection, ProjectDatabaseSession, TransactionEvents]).pipe(
+  Effect.all([DatabaseConnection, DatabaseSession, TransactionEvents]).pipe(
     Effect.andThen((deps) => makeTransactionalBoundary(...deps))
   )
-).pipe(Layer.provide(TransactionEventsLive));
+).pipe(Layer.provide(Kralf), Layer.provide(TransactionEventsLive));
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
   Layer.provideMerge(DatabaseSessionLive),
@@ -216,8 +228,8 @@ export const ApplicationLive = Layer.provideMerge(DomainServiceLive, Infrastruct
 const handler = Router.toHandlerUndecoded(router);
 
 const res = await handler(
-  // AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
-  GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
+  AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
+  // GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
 ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
 
 console.log(res);
