@@ -7,7 +7,7 @@ import {
   Transaction,
   type CompiledQuery
 } from 'kysely';
-import { Effect, Ref, Scope, Data, Match } from 'effect';
+import { Effect, Ref, Scope, Data, Match, PubSub } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { Client, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
@@ -73,7 +73,8 @@ class RollbackError extends Data.TaggedError('RollbackError') {
 
 export const makeTransactionalBoundary = <DB>(
   connection: { client: Client; db: Kysely<DB> },
-  session: DatabaseSession<DB, LibsqlError>
+  session: DatabaseSession<DB, LibsqlError>,
+  pub: PubSub.PubSub<keyof TransactionalBoundary>
 ) =>
   Effect.gen(function* () {
     const { client, db } = connection;
@@ -81,22 +82,24 @@ export const makeTransactionalBoundary = <DB>(
 
     const boundary: TransactionalBoundary = {
       begin: (mode) =>
-        Match.value(mode).pipe(
-          Match.when('Batched', () =>
-            Effect.gen(function* () {
-              yield* Ref.set(transactionSession, Batched({ writes: [] }));
-              yield* Ref.set(session, createBatchedDatabaseSession(db, transactionSession));
-            })
-          ),
-          Match.when('Serialized', () =>
-            Effect.gen(function* () {
-              const tx = yield* initiateTransaction(db);
-              yield* Ref.set(transactionSession, Serialized({ tx }));
-              yield* Ref.set(session, createDatabaseSession(tx.tx));
-            })
-          ),
-          Match.exhaustive
-        ),
+        Match.value(mode)
+          .pipe(
+            Match.when('Batched', () =>
+              Effect.gen(function* () {
+                yield* Ref.set(transactionSession, Batched({ writes: [] }));
+                yield* Ref.set(session, createBatchedDatabaseSession(db, transactionSession));
+              })
+            ),
+            Match.when('Serialized', () =>
+              Effect.gen(function* () {
+                const tx = yield* initiateTransaction(db);
+                yield* Ref.set(transactionSession, Serialized({ tx }));
+                yield* Ref.set(session, createDatabaseSession(tx.tx));
+              })
+            ),
+            Match.exhaustive
+          )
+          .pipe(Effect.tap(() => PubSub.publish(pub, 'begin'))),
       commit: () =>
         // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
         Ref.get(transactionSession).pipe(
@@ -111,7 +114,8 @@ export const makeTransactionalBoundary = <DB>(
                 ),
               None: () => Effect.logError('Calling #commit when there is no transaction')
             })
-          )
+          ),
+          Effect.tap(() => PubSub.publish(pub, 'commit'))
         ),
       rollback: () =>
         Ref.get(transactionSession).pipe(
@@ -121,7 +125,8 @@ export const makeTransactionalBoundary = <DB>(
               Batched: (a) => Ref.set(transactionSession, { ...a, writes: [] }),
               None: () => Effect.logError('Calling #rollback when there is no transaction')
             })
-          )
+          ),
+          Effect.tap(() => PubSub.publish(pub, 'rollback'))
         )
     };
 
