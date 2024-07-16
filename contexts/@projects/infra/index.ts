@@ -32,6 +32,8 @@ import {
 } from '@hex-effect/infra-kysely-libsql';
 import { Kysely, sql } from 'kysely';
 import { jsonArrayFrom } from 'kysely/helpers/sqlite';
+import { connect, NatsConnection } from 'nats';
+import { asyncExitHook } from 'exit-hook';
 
 class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
   DatabaseSession,
@@ -223,6 +225,22 @@ const TransactionEventsLive = Layer.effect(
   PubSub.sliding<keyof TransactionalBoundary>(10)
 );
 
+class NatsConnectionService extends Context.Tag('ProjectNatsConnection')<
+  NatsConnectionService,
+  { connection: NatsConnection }
+>() {}
+
+const NatsConnectionLive = Layer.scoped(
+  NatsConnectionService,
+  Effect.gen(function* () {
+    const connection = yield* Effect.promise(() => connect());
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => connection.drain()).pipe(Effect.andThen(Effect.log('done')))
+    );
+    return { connection };
+  })
+);
+
 const Kralf = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
@@ -243,10 +261,12 @@ const Kralf = Layer.scopedDiscard(
             .compile()
         ).pipe(
           Effect.tap((a) => Effect.log(a.rows.map((r) => `${r.context}.${r.tag}`).join(''))),
-          Effect.map((e) =>
-            e.rows.map((a) =>
-              Schema.decodeUnknownSync(Schema.parseJson(ProjectDomainEvents))(a.payload)
-            )
+          Effect.andThen((e) =>
+            Effect.gen(function* () {
+              const { connection } = yield* NatsConnectionService;
+              yield* Effect.promise(() => connection.jetstream().publish('kralf'));
+              yield* Effect.log(e);
+            })
           )
         )
       )
@@ -263,7 +283,7 @@ const Kralf = Layer.scopedDiscard(
       )
       .pipe(Effect.forkScoped);
   })
-);
+).pipe(Layer.provide(NatsConnectionLive));
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
@@ -289,4 +309,9 @@ const res = await handler(
   // GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
 ).pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
-// console.log(res);
+asyncExitHook(
+  async () => {
+    await runtime.dispose();
+  },
+  { wait: 500 }
+);
