@@ -137,12 +137,12 @@ export const registerEvents = Effect.gen(function* () {
 
   yield* Effect.all(
     [
-      register(TaskCompletedEvent, ['@projects/TaskCompletedEvent'], sendEmailAfterTaskCompleted, {
+      register(TaskCompletedEvent, ['@projects.TaskCompletedEvent'], sendEmailAfterTaskCompleted, {
         $durableName: 'send-email-after-task-completed'
       }),
       register(
         ProjectDomainEvents,
-        ['@projects/ProjectCreatedEvent', '@projects/TaskCompletedEvent'],
+        ['@projects.ProjectCreatedEvent', '@projects.TaskCompletedEvent'],
         someCompositeEventHandler,
         {
           $durableName: 'some-composite-event-handler'

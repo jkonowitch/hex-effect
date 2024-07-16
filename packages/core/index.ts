@@ -23,7 +23,7 @@ export type DomainEventPublisher = {
 export type EventHandlerService = {
   register<Q extends EventBaseWithTag, I, R extends never, Err, Req>(
     eventSchema: Schema.Schema<Q, I, R>,
-    eventNames: `${Schema.Schema<Q, I, R>['Type']['_context']}/${Schema.Schema<Q, I, R>['Type']['_tag']}`[],
+    eventNames: `${Schema.Schema<Q, I, R>['Type']['_context']}.${Schema.Schema<Q, I, R>['Type']['_tag']}`[],
     handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
     config: { $durableName: string }
   ): Effect.Effect<void, never, Req>;
