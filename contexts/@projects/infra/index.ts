@@ -200,7 +200,7 @@ export const ApplicationLive = Layer.provideMerge(DomainServiceLive, Infrastruct
 const handler = Router.toHandlerUndecoded(router);
 
 const res = await handler(
-  GetProjectWithTasks.make({ projectId: ProjectId.make('c7KPGnS7N6XRUW4hGiCQr') })
+  GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
 ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
 
 console.log(res);
