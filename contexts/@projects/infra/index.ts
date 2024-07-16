@@ -1,6 +1,7 @@
 import { Effect, Context, Layer, Option, Ref, Config, PubSub, Queue } from 'effect';
 import {
   Project,
+  ProjectDomainEvents,
   ProjectDomainPublisher,
   ProjectId,
   ProjectRepository,
@@ -17,7 +18,8 @@ import {
   GetProjectWithTasks,
   router,
   ProjectTransactionalBoundary,
-  AddTask
+  AddTask,
+  CompleteTask
 } from '@projects/application';
 import { Router } from '@effect/rpc';
 import { createClient, type Client, type LibsqlError } from '@libsql/client';
@@ -161,9 +163,29 @@ const TaskRepositoryLive = Layer.effect(
   )
 );
 
-const ProjectDomainPublisherLive = Layer.succeed(ProjectDomainPublisher, {
-  publish: () => Effect.void
-});
+const ProjectDomainPublisherLive = Layer.effect(
+  ProjectDomainPublisher,
+  Effect.gen(function* () {
+    const { write, queryBuilder } = yield* Ref.get(yield* DatabaseSession);
+
+    return {
+      publish(event) {
+        const encoded = Schema.encodeUnknownSync(ProjectDomainEvents)(event);
+        return write(
+          queryBuilder
+            .insertInto('events')
+            .values({
+              occurredOn: encoded.occurredOn,
+              id: encoded.messageId,
+              delivered: 0,
+              payload: JSON.stringify(encoded)
+            })
+            .compile()
+        ).pipe(Effect.orDie);
+      }
+    };
+  })
+);
 
 const DomainServiceLive = Layer.mergeAll(
   TaskRepositoryLive,
@@ -232,7 +254,8 @@ export const ApplicationLive = Layer.provideMerge(DomainServiceLive, Infrastruct
 const handler = Router.toHandlerUndecoded(router);
 
 const res = await handler(
-  AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
+  CompleteTask.make({ taskId: TaskId.make('SS8yZPEBhpn_6W1_hB0ay') })
+  // AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
   // GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
 ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
 
