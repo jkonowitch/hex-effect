@@ -170,7 +170,7 @@ const ProjectDomainPublisherLive = Layer.effect(
 
     return {
       publish(event) {
-        const encoded = Schema.encodeUnknownSync(ProjectDomainEvents)(event);
+        const encoded = Schema.encodeSync(ProjectDomainEvents)(event);
         return write(
           queryBuilder
             .insertInto('events')

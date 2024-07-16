@@ -111,5 +111,5 @@ export const ProjectDomainEvents = Schema.Union(ProjectCreatedEvent, TaskComplet
 
 export class ProjectDomainPublisher extends Context.Tag('ProjectDomainPublisher')<
   ProjectDomainPublisher,
-  DomainEventPublisher
+  DomainEventPublisher<(typeof ProjectDomainEvents)['Type']>
 >() {}

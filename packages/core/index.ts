@@ -16,8 +16,8 @@ export const EventBase = Schema.Struct({
 
 type EventBaseWithTag = typeof EventBase.Type & { _tag: string };
 
-export type DomainEventPublisher = {
-  publish(event: EventBaseWithTag): Effect.Effect<void>;
+export type DomainEventPublisher<EventType extends EventBaseWithTag> = {
+  publish(event: EventType): Effect.Effect<void>;
 };
 
 export type EventHandlerService = {
