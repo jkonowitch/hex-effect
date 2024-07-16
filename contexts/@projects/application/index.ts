@@ -1,16 +1,17 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
+import { EventHandlerService } from '@hex-effect/core';
 import type { Modes, TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
 import {
   Project,
-  ProjectDomainEvents,
+  TaskCompletedEvent,
   ProjectId,
   ProjectRepository,
   Task,
   TaskId,
   TaskRepository
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Scope, Match, Context } from 'effect';
+import { Effect, type Request, Option, pipe, Scope, Context } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -54,13 +55,6 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
   {
     projectId: ProjectId
   }
-) {}
-
-export class ProcessEvent extends Schema.TaggedRequest<ProcessEvent>()(
-  'ProcessEvent',
-  ApplicationError,
-  Schema.Void,
-  { event: ProjectDomainEvents }
 ) {}
 
 /**
@@ -117,24 +111,27 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
-const processEvent = ({ event }: ProcessEvent) =>
-  Match.value(event)
-    .pipe(
-      Match.tag('ProjectCreatedEvent', (e) =>
-        Effect.log(`Emailing user that they have created a new project with id: ${e.projectId}`)
-      ),
-      Match.tag('TaskCompletedEvent', () => Effect.void),
-      Match.exhaustive
-    )
-    // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary()) satisfies RequestHandler<ProcessEvent>;
+class ProjectEventHandlerService extends Context.Tag('ProjectEventHandlerService')<
+  ProjectEventHandlerService,
+  EventHandlerService
+>() {}
+
+const sendEmailAfterTaskCompleted = (e: (typeof TaskCompletedEvent)['Type']) =>
+  Effect.log(`Emailing re ${e.taskId}`);
+
+export const registerEvents = Effect.gen(function* () {
+  const { register } = yield* ProjectEventHandlerService;
+
+  register(TaskCompletedEvent, ['@projects/TaskCompletedEvent'], sendEmailAfterTaskCompleted, {
+    $durableName: 'send-email-after-task-completed'
+  });
+});
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
-  Rpc.effect(GetProjectWithTasks, projectWithTasks),
-  Rpc.effect(ProcessEvent, processEvent)
+  Rpc.effect(GetProjectWithTasks, projectWithTasks)
 );
 
 /**
