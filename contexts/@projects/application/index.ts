@@ -9,9 +9,10 @@ import {
   ProjectRepository,
   Task,
   TaskId,
-  TaskRepository
+  TaskRepository,
+  ProjectDomainEvents
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Scope, Context } from 'effect';
+import { Effect, type Request, Option, pipe, Scope, Context, Match } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -117,14 +118,39 @@ class ProjectEventHandlerService extends Context.Tag('ProjectEventHandlerService
 >() {}
 
 const sendEmailAfterTaskCompleted = (e: (typeof TaskCompletedEvent)['Type']) =>
-  Effect.log(`Emailing re ${e.taskId}`);
+  Effect.serviceFunctions(TaskRepository)
+    .findById(e.taskId)
+    .pipe(
+      succeedOrNotFound(),
+      Effect.andThen((task) => Effect.log(`Emailing regarding task: ${task.description}`))
+    );
+
+const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
+  Match.value(e).pipe(
+    Match.tag('ProjectCreatedEvent', () => Effect.log('Project Created Event')),
+    Match.tag('TaskCompletedEvent', () => Effect.log('Task Completed Event')),
+    Match.exhaustive
+  );
 
 export const registerEvents = Effect.gen(function* () {
   const { register } = yield* ProjectEventHandlerService;
 
-  register(TaskCompletedEvent, ['@projects/TaskCompletedEvent'], sendEmailAfterTaskCompleted, {
-    $durableName: 'send-email-after-task-completed'
-  });
+  yield* Effect.all(
+    [
+      register(TaskCompletedEvent, ['@projects/TaskCompletedEvent'], sendEmailAfterTaskCompleted, {
+        $durableName: 'send-email-after-task-completed'
+      }),
+      register(
+        ProjectDomainEvents,
+        ['@projects/ProjectCreatedEvent', '@projects/TaskCompletedEvent'],
+        someCompositeEventHandler,
+        {
+          $durableName: 'some-composite-event-handler'
+        }
+      )
+    ],
+    { concurrency: 'unbounded' }
+  );
 });
 
 export const router = Router.make(
