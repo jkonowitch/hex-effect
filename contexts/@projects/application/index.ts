@@ -98,7 +98,6 @@ const completeTask = ({ taskId }: CompleteTask) =>
       succeedOrNotFound(`No task ${taskId}`),
       Effect.flatMap(Task.complete)
     );
-    yield* Effect.log('modified task', task);
     yield* repo.save(task);
   }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
 
