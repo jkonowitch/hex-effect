@@ -1,4 +1,5 @@
-import { Effect, Context, Layer, Option, Ref, Config, PubSub, Queue } from 'effect';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { Effect, Context, Layer, Option, Ref, Config, PubSub, Queue, ManagedRuntime } from 'effect';
 import {
   Project,
   ProjectDomainEvents,
@@ -224,16 +225,33 @@ const TransactionEventsLive = Layer.effect(
 const Kralf = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
-
+    const session = yield* DatabaseSession;
     const dequeue = yield* PubSub.subscribe(pub);
+
+    const doThing = Effect.gen(function* () {
+      const { read, queryBuilder } = yield* Ref.get(session);
+
+      return yield* read(
+        queryBuilder.selectFrom('events').selectAll().where('delivered', '=', 0).compile()
+      ).pipe(
+        Effect.map((e) =>
+          e.rows.map((a) =>
+            Schema.decodeUnknownSync(Schema.parseJson(ProjectDomainEvents))(a.payload)
+          )
+        )
+      );
+    });
 
     yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
-        Effect.if({ onTrue: () => Effect.log('committed'), onFalse: () => Effect.void }),
+        Effect.if({
+          onTrue: () => doThing.pipe(Effect.andThen((e) => Effect.log(e))),
+          onFalse: () => Effect.void
+        }),
         Effect.forever
       )
-      .pipe(Effect.forkDaemon);
+      .pipe(Effect.forkScoped);
   })
 );
 
@@ -249,7 +267,9 @@ const InfrastructureLive = TransactionalBoundaryLive.pipe(
   Layer.provideMerge(DatabaseConnectionLive)
 );
 
-export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
+const runtime = ManagedRuntime.make(InfrastructureLive);
+
+// export const ApplicationLive = Layer.provideMerge(DomainServiceLive, InfrastructureLive);
 
 const handler = Router.toHandlerUndecoded(router);
 
@@ -257,6 +277,6 @@ const res = await handler(
   CompleteTask.make({ taskId: TaskId.make('SS8yZPEBhpn_6W1_hB0ay') })
   // AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
   // GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
-).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
+).pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
-console.log(res);
+// console.log(res);
