@@ -206,7 +206,11 @@ const Kralf = Layer.scopedDiscard(
     const dequeue = yield* PubSub.subscribe(pub);
 
     yield* Queue.take(dequeue)
-      .pipe(Effect.andThen(Effect.log), Effect.forever)
+      .pipe(
+        Effect.map((a) => a === 'commit'),
+        Effect.if({ onTrue: () => Effect.log('committed'), onFalse: () => Effect.void }),
+        Effect.forever
+      )
       .pipe(Effect.forkDaemon);
   })
 );
