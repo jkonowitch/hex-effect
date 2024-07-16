@@ -180,13 +180,13 @@ const DatabaseConnectionLive = Layer.scoped(
 
 const DatabaseSessionLive = Layer.effect(
   ProjectDatabaseSession,
-  ProjectDatabaseConnection.pipe(Effect.andThen((conn) => Ref.make(createDatabaseSession(conn.db))))
+  ProjectDatabaseConnection.pipe(Effect.andThen(({ db }) => Ref.make(createDatabaseSession(db))))
 );
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
   Effect.zip(ProjectDatabaseConnection, ProjectDatabaseSession).pipe(
-    Effect.andThen(([conn, session]) => makeTransactionalBoundary(conn, session))
+    Effect.andThen((deps) => makeTransactionalBoundary(...deps))
   )
 );
 
