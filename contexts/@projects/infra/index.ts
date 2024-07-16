@@ -30,7 +30,8 @@ import {
   makeTransactionalBoundary,
   TransactionalBoundary
 } from '@hex-effect/infra-kysely-libsql';
-import { Kysely } from 'kysely';
+import { Kysely, sql } from 'kysely';
+import { jsonArrayFrom } from 'kysely/helpers/sqlite';
 
 class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
   DatabaseSession,
@@ -228,25 +229,34 @@ const Kralf = Layer.scopedDiscard(
     const session = yield* DatabaseSession;
     const dequeue = yield* PubSub.subscribe(pub);
 
-    const doThing = Effect.gen(function* () {
-      const { read, queryBuilder } = yield* Ref.get(session);
-
-      return yield* read(
-        queryBuilder.selectFrom('events').selectAll().where('delivered', '=', 0).compile()
-      ).pipe(
-        Effect.map((e) =>
-          e.rows.map((a) =>
-            Schema.decodeUnknownSync(Schema.parseJson(ProjectDomainEvents))(a.payload)
+    const readEvents = Ref.get(session).pipe(
+      Effect.andThen(({ read, queryBuilder }) =>
+        read(
+          queryBuilder
+            .selectFrom('events')
+            .select(({ fn, val, ref, eb }) => [
+              'payload',
+              fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
+              fn<string>('json_extract', ['payload', val('$._context')]).as('context')
+            ])
+            .where('delivered', '=', 0)
+            .compile()
+        ).pipe(
+          Effect.tap((a) => Effect.log(a.rows.map((r) => `${r.context}.${r.tag}`).join(''))),
+          Effect.map((e) =>
+            e.rows.map((a) =>
+              Schema.decodeUnknownSync(Schema.parseJson(ProjectDomainEvents))(a.payload)
+            )
           )
         )
-      );
-    });
+      )
+    );
 
     yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
         Effect.if({
-          onTrue: () => doThing.pipe(Effect.andThen((e) => Effect.log(e))),
+          onTrue: () => readEvents.pipe(Effect.andThen((e) => Effect.log(e))),
           onFalse: () => Effect.void
         }),
         Effect.forever
