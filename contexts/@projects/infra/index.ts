@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Option, Ref, Config } from 'effect';
+import { Effect, Context, Layer, Option, Ref, Config, PubSub } from 'effect';
 import {
   Project,
   ProjectDomainPublisher,
@@ -13,13 +13,19 @@ import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
 import { DatabaseSession } from '@hex-effect/infra';
-import { GetProjectWithTasks, router, ProjectTransactionalBoundary } from '@projects/application';
+import {
+  GetProjectWithTasks,
+  router,
+  ProjectTransactionalBoundary,
+  AddTask
+} from '@projects/application';
 import { Router } from '@effect/rpc';
 import { createClient, type Client, type LibsqlError } from '@libsql/client';
 import {
   createDatabaseSession,
   LibsqlDialect,
-  makeTransactionalBoundary
+  makeTransactionalBoundary,
+  TransactionalBoundary
 } from '@hex-effect/infra-kysely-libsql';
 import { Kysely } from 'kysely';
 
@@ -183,12 +189,22 @@ const DatabaseSessionLive = Layer.effect(
   ProjectDatabaseConnection.pipe(Effect.andThen(({ db }) => Ref.make(createDatabaseSession(db))))
 );
 
+class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<
+  TransactionEvents,
+  PubSub.PubSub<keyof TransactionalBoundary>
+>() {}
+
+const TransactionEventsLive = Layer.effect(
+  TransactionEvents,
+  PubSub.sliding<keyof TransactionalBoundary>(10)
+);
+
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
-  Effect.zip(ProjectDatabaseConnection, ProjectDatabaseSession).pipe(
+  Effect.all([ProjectDatabaseConnection, ProjectDatabaseSession, TransactionEvents]).pipe(
     Effect.andThen((deps) => makeTransactionalBoundary(...deps))
   )
-);
+).pipe(Layer.provide(TransactionEventsLive));
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
   Layer.provideMerge(DatabaseSessionLive),
@@ -200,6 +216,7 @@ export const ApplicationLive = Layer.provideMerge(DomainServiceLive, Infrastruct
 const handler = Router.toHandlerUndecoded(router);
 
 const res = await handler(
+  // AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
   GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
 ).pipe(Effect.provide(ApplicationLive), Effect.runPromise);
 
