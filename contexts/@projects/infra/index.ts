@@ -44,6 +44,7 @@ import { Kysely, sql } from 'kysely';
 import { jsonArrayFrom } from 'kysely/helpers/sqlite';
 import { connect, Empty, JetStreamClient, NatsConnection, RetentionPolicy, StreamInfo } from 'nats';
 import { asyncExitHook } from 'exit-hook';
+import { doThing, EventPublisher } from '@hex-effect/infra-kysely-libsql/messaging.js';
 
 class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
   DatabaseSession,
@@ -264,91 +265,51 @@ const NatsConnectionLive = Layer.scoped(
   })
 );
 
-type Shmee = {
-  id: string;
-  payload: string;
-  tag: string;
-  context: string;
-}[];
+export const makeJawn = (session: DatabaseSessionService<DB, LibsqlError>): EventPublisher => {
+  return {
+    getUnpublished: () =>
+      Effect.gen(function* () {
+        yield* Effect.log('getting events');
+        const { read, queryBuilder } = yield* FiberRef.get(session);
 
-const getEvents = Effect.gen(function* () {
-  yield* Effect.log('getting events');
+        const results = yield* read(
+          queryBuilder
+            .selectFrom('events')
+            .select(({ fn, val }) => [
+              'payload',
+              'id',
+              fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
+              fn<string>('json_extract', ['payload', val('$._context')]).as('context')
+            ])
+            .where('delivered', '=', 0)
+            .compile()
+        );
 
-  const session = yield* DatabaseSession;
-
-  const { read, queryBuilder } = yield* FiberRef.get(session);
-
-  const results = yield* read(
-    queryBuilder
-      .selectFrom('events')
-      .select(({ fn, val }) => [
-        'payload',
-        'id',
-        fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
-        fn<string>('json_extract', ['payload', val('$._context')]).as('context')
-      ])
-      .where('delivered', '=', 0)
-      .compile()
-  );
-
-  yield* Effect.log(`Found: ${results.rows.length} events`);
-
-  return results.rows;
-}) satisfies Effect.Effect<Shmee, unknown, unknown>;
-
-const publishEvents = (events: Shmee) =>
-  Effect.gen(function* () {
-    const { jetstream } = yield* NatsConnectionService;
-    const applicationName = yield* Config.string('APPLICATION_NAME');
-    yield* Effect.forEach(events, (event) =>
-      Effect.tryPromise(() =>
-        jetstream.publish(`${applicationName}.${event.context}.${event.tag}`, event.payload, {
-          msgID: event.id
-        })
-      )
-    );
-    yield* Effect.log('publishing events');
-  });
-
-const markAsDelivered = (events: Shmee) =>
-  Effect.gen(function* () {
-    const session = yield* DatabaseSession;
-    const { write, queryBuilder } = yield* FiberRef.get(session);
-    yield* write(
-      queryBuilder
-        .updateTable('events')
-        .set({ delivered: 1 })
-        .where(
-          'id',
-          'in',
-          events.map((e) => e.id)
-        )
-        .compile()
-    );
-    yield* Effect.log('marked events as delivered');
-  });
+        return results.rows;
+      }),
+    markPublished: (ids) =>
+      Effect.gen(function* () {
+        const { write, queryBuilder } = yield* FiberRef.get(session);
+        yield* write(
+          queryBuilder.updateTable('events').set({ delivered: 1 }).where('id', 'in', ids).compile()
+        );
+      })
+  };
+};
 
 const Kralf = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
     const session = yield* DatabaseSession;
     const dequeue = yield* PubSub.subscribe(pub);
-
-    const s = yield* Queue.take(dequeue)
+    const { jetstream } = yield* NatsConnectionService;
+    const q = doThing(makeJawn(session), jetstream);
+    yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
         Effect.if({
           onTrue: () =>
-            Effect.retry(
-              getEvents
-                .pipe(
-                  Effect.flatMap((events) =>
-                    Effect.zip(publishEvents(events), markAsDelivered(events))
-                  )
-                )
-                .pipe(Effect.tapError((e) => Effect.logError(e))),
-              { times: 3 }
-            ),
+            Effect.retry(q.pipe(Effect.tapError((e) => Effect.logError(e))), { times: 3 }),
           onFalse: () => Effect.void
         }),
         Effect.forever
