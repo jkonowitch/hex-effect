@@ -255,42 +255,81 @@ const NatsConnectionLive = Layer.scoped(
   })
 );
 
+type Shmee = {
+  id: string;
+  payload: string;
+  tag: string;
+  context: string;
+}[];
+
+const getEvents = Effect.gen(function* () {
+  yield* Effect.log('getting events');
+
+  const session = yield* DatabaseSession;
+
+  const { read, queryBuilder } = yield* FiberRef.get(session);
+
+  const results = yield* read(
+    queryBuilder
+      .selectFrom('events')
+      .select(({ fn, val }) => [
+        'payload',
+        'id',
+        fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
+        fn<string>('json_extract', ['payload', val('$._context')]).as('context')
+      ])
+      .where('delivered', '=', 0)
+      .compile()
+  );
+
+  yield* Effect.log(`Found: ${results.rows.length} events`);
+
+  return results.rows;
+}) satisfies Effect.Effect<Shmee, unknown, unknown>;
+
+const publishEvents = (events: Shmee) =>
+  Effect.gen(function* () {
+    const { connection } = yield* NatsConnectionService;
+    yield* Effect.log('publishing events');
+  });
+
+const markAsDelivered = (events: Shmee) =>
+  Effect.gen(function* () {
+    const session = yield* DatabaseSession;
+    const { write, queryBuilder } = yield* FiberRef.get(session);
+    yield* write(
+      queryBuilder
+        .updateTable('events')
+        .set({ delivered: 1 })
+        .where(
+          'id',
+          'in',
+          events.map((e) => e.id)
+        )
+        .compile()
+    );
+    yield* Effect.log('marked events as delivered');
+  });
+
 const Kralf = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
     const session = yield* DatabaseSession;
     const dequeue = yield* PubSub.subscribe(pub);
 
-    const readEvents = Ref.get(session).pipe(
-      Effect.andThen(({ read, queryBuilder }) =>
-        read(
-          queryBuilder
-            .selectFrom('events')
-            .select(({ fn, val, ref, eb }) => [
-              'payload',
-              fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
-              fn<string>('json_extract', ['payload', val('$._context')]).as('context')
-            ])
-            .where('delivered', '=', 0)
-            .compile()
-        ).pipe(
-          Effect.tap((a) => Effect.log(a.rows.map((r) => `${r.context}.${r.tag}`).join(''))),
-          Effect.andThen((e) =>
-            Effect.gen(function* () {
-              const { connection } = yield* NatsConnectionService;
-              yield* Effect.promise(() => connection.jetstream().publish('kralf'));
-              yield* Effect.log(e);
-            })
-          )
-        )
-      )
-    );
-
-    yield* Queue.take(dequeue)
+    const s = yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
         Effect.if({
-          onTrue: () => readEvents.pipe(Effect.andThen((e) => Effect.log(e))),
+          onTrue: () =>
+            Effect.retry(
+              getEvents.pipe(
+                Effect.flatMap((events) =>
+                  Effect.zip(publishEvents(events), markAsDelivered(events))
+                )
+              ),
+              { times: 3 }
+            ),
           onFalse: () => Effect.void
         }),
         Effect.forever
@@ -317,11 +356,20 @@ const runtime = ManagedRuntime.make(InfrastructureLive);
 
 const handler = Router.toHandlerUndecoded(router);
 
-const res = await handler(
-  CompleteTask.make({ taskId: TaskId.make('SS8yZPEBhpn_6W1_hB0ay') })
-  // AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'tight' })
-  // GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
-).pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
+// const res = await handler(
+//   CompleteTask.make({ taskId: TaskId.make('SS8yZPEBhpn_6W1_hB0ay') })
+//   // AddTask.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1'), description: 'shmee' })
+//   // GetProjectWithTasks.make({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
+// ).pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
+
+const program = Effect.zip(
+  handler(CompleteTask.make({ taskId: TaskId.make('SS8yZPEBhpn_6W1_hB0ay') })),
+  Effect.log('kralf'),
+  { concurrent: true }
+);
+
+await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
+await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
 asyncExitHook(
   async () => {
