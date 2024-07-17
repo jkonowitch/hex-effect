@@ -257,47 +257,49 @@ class NatsService extends Context.Tag('ProjectNatsConnection')<
   );
 }
 
-export const EventPublisherLive = (
-  session: DatabaseSessionService<DB, LibsqlError>
-): EventStore => {
-  return {
-    getUnpublished: () =>
-      Effect.gen(function* () {
-        yield* Effect.log('getting events');
-        const { read, queryBuilder } = yield* FiberRef.get(session);
-
-        const results = yield* read(
-          queryBuilder
-            .selectFrom('events')
-            .select(({ fn, val }) => [
-              'payload',
-              'id',
-              fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
-              fn<string>('json_extract', ['payload', val('$._context')]).as('context')
-            ])
-            .where('delivered', '=', 0)
-            .compile()
-        );
-
-        return results.rows;
-      }),
-    markPublished: (ids) =>
-      Effect.gen(function* () {
-        const { write, queryBuilder } = yield* FiberRef.get(session);
-        yield* write(
-          queryBuilder.updateTable('events').set({ delivered: 1 }).where('id', 'in', ids).compile()
-        );
-      })
-  };
-};
+class EventStoreService extends Context.Tag('ProjectEventStore')<EventStoreService, EventStore>() {
+  public static live = Layer.effect(
+    EventStoreService,
+    DatabaseSession.pipe(
+      Effect.map((session) => ({
+        getUnpublished: () =>
+          Effect.gen(function* () {
+            const { read, queryBuilder } = yield* FiberRef.get(session);
+            return yield* read(
+              queryBuilder
+                .selectFrom('events')
+                .select(({ fn, val }) => [
+                  'payload',
+                  'id',
+                  fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
+                  fn<string>('json_extract', ['payload', val('$._context')]).as('context')
+                ])
+                .where('delivered', '=', 0)
+                .compile()
+            ).pipe(Effect.map((r) => r.rows));
+          }),
+        markPublished: (ids: string[]) =>
+          Effect.gen(function* () {
+            const { write, queryBuilder } = yield* FiberRef.get(session);
+            yield* write(
+              queryBuilder
+                .updateTable('events')
+                .set({ delivered: 1 })
+                .where('id', 'in', ids)
+                .compile()
+            );
+          })
+      }))
+    )
+  );
+}
 
 const Kralf = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
-    const session = yield* DatabaseSession;
     const dequeue = yield* PubSub.subscribe(pub);
     const { jetstream } = yield* NatsService;
-    const q = doThing(EventPublisherLive(session), jetstream);
+    const q = doThing(yield* EventStoreService, jetstream);
     yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
@@ -310,7 +312,7 @@ const Kralf = Layer.scopedDiscard(
       )
       .pipe(Effect.forkScoped);
   })
-).pipe(Layer.provide(NatsService.live));
+).pipe(Layer.provide(NatsService.live), Layer.provide(EventStoreService.live));
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
