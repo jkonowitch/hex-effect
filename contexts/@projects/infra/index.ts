@@ -1,13 +1,13 @@
-import { Effect, Context, Layer, FiberRef, Config, PubSub, Queue, ManagedRuntime } from 'effect';
+import { Effect, Context, Layer, Config, PubSub, Queue, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
 import { makeTransactionalBoundary, TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
 import { connect, JetStreamClient, RetentionPolicy, StreamInfo } from 'nats';
 import { asyncExitHook } from 'exit-hook';
-import { doThing, EventStore } from '@hex-effect/infra-kysely-libsql/messaging.js';
+import { doThing } from '@hex-effect/infra-kysely-libsql/messaging.js';
 import { DatabaseConnection, DatabaseSession } from './services.js';
-import { DomainServiceLive } from './repositories.js';
+import { DomainServiceLive, EventStore } from './repositories.js';
 
 class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<
   TransactionEvents,
@@ -44,49 +44,12 @@ class NatsService extends Context.Tag('ProjectNatsConnection')<
   );
 }
 
-class EventStoreService extends Context.Tag('ProjectEventStore')<EventStoreService, EventStore>() {
-  public static live = Layer.effect(
-    EventStoreService,
-    DatabaseSession.pipe(
-      Effect.map((session) => ({
-        getUnpublished: () =>
-          Effect.gen(function* () {
-            const { read, queryBuilder } = yield* FiberRef.get(session);
-            return yield* read(
-              queryBuilder
-                .selectFrom('events')
-                .select(({ fn, val }) => [
-                  'payload',
-                  'id',
-                  fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
-                  fn<string>('json_extract', ['payload', val('$._context')]).as('context')
-                ])
-                .where('delivered', '=', 0)
-                .compile()
-            ).pipe(Effect.map((r) => r.rows));
-          }),
-        markPublished: (ids: string[]) =>
-          Effect.gen(function* () {
-            const { write, queryBuilder } = yield* FiberRef.get(session);
-            yield* write(
-              queryBuilder
-                .updateTable('events')
-                .set({ delivered: 1 })
-                .where('id', 'in', ids)
-                .compile()
-            );
-          })
-      }))
-    )
-  );
-}
-
 const EventPublishingDaemon = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
     const dequeue = yield* PubSub.subscribe(pub);
     const { jetstream } = yield* NatsService;
-    const q = doThing(yield* EventStoreService, jetstream);
+    const q = doThing(yield* EventStore, jetstream);
     yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
@@ -99,7 +62,7 @@ const EventPublishingDaemon = Layer.scopedDiscard(
       )
       .pipe(Effect.forkScoped);
   })
-).pipe(Layer.provide(NatsService.live), Layer.provide(EventStoreService.live));
+).pipe(Layer.provide(NatsService.live));
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
@@ -109,6 +72,7 @@ const TransactionalBoundaryLive = Layer.effect(
 ).pipe(Layer.provide(EventPublishingDaemon), Layer.provide(TransactionEvents.live));
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
+  Layer.provideMerge(EventStore.live),
   Layer.provideMerge(DatabaseSession.live),
   Layer.provideMerge(DatabaseConnection.live)
 );

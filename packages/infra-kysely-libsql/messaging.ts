@@ -9,9 +9,10 @@ type Events = {
   context: string;
 }[];
 
-export type EventStore = {
+export type EventStoreService = {
   getUnpublished: () => Effect.Effect<Events, LibsqlError>;
   markPublished: (ids: string[]) => Effect.Effect<void, LibsqlError>;
+  save: (event: { occurredOn: string; messageId: string }) => Effect.Effect<void, LibsqlError>;
 };
 
 const publishEvents = (events: Events, jetstream: JetStreamClient) =>
@@ -27,7 +28,7 @@ const publishEvents = (events: Events, jetstream: JetStreamClient) =>
     yield* Effect.log('publishing events');
   });
 
-export const doThing = (publisher: EventStore, jetstream: JetStreamClient) =>
+export const doThing = (publisher: EventStoreService, jetstream: JetStreamClient) =>
   publisher
     .getUnpublished()
     .pipe(
