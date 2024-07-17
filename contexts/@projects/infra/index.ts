@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   Effect,
   Context,
@@ -25,13 +24,7 @@ import { nanoid } from 'nanoid';
 import { omit } from 'effect/Struct';
 import type { DB } from './persistence/schema.js';
 import type { DatabaseSession as DatabaseSessionService } from '@hex-effect/infra';
-import {
-  GetProjectWithTasks,
-  router,
-  ProjectTransactionalBoundary,
-  AddTask,
-  CompleteTask
-} from '@projects/application';
+import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
 import { createClient, type Client, type LibsqlError } from '@libsql/client';
 import {
@@ -40,21 +33,38 @@ import {
   makeTransactionalBoundary,
   TransactionalBoundary
 } from '@hex-effect/infra-kysely-libsql';
-import { Kysely, sql } from 'kysely';
-import { jsonArrayFrom } from 'kysely/helpers/sqlite';
-import { connect, Empty, JetStreamClient, NatsConnection, RetentionPolicy, StreamInfo } from 'nats';
+import { Kysely } from 'kysely';
+import { connect, JetStreamClient, RetentionPolicy, StreamInfo } from 'nats';
 import { asyncExitHook } from 'exit-hook';
-import { doThing, EventPublisher } from '@hex-effect/infra-kysely-libsql/messaging.js';
-
-class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
-  DatabaseSession,
-  DatabaseSessionService<DB, LibsqlError>
->() {}
+import { doThing, EventStore } from '@hex-effect/infra-kysely-libsql/messaging.js';
 
 class DatabaseConnection extends Context.Tag('ProjectDatabaseConnection')<
   DatabaseConnection,
   { client: Client; db: Kysely<DB> }
->() {}
+>() {
+  public static live = Layer.scoped(
+    DatabaseConnection,
+    Effect.gen(function* () {
+      const connectionString = yield* Config.string('PROJECT_DB');
+      const client = createClient({ url: connectionString });
+      yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
+      return {
+        client,
+        db: new Kysely<DB>({ dialect: new LibsqlDialect({ client }) })
+      };
+    })
+  );
+}
+
+class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
+  DatabaseSession,
+  DatabaseSessionService<DB, LibsqlError>
+>() {
+  public static live = Layer.scoped(
+    DatabaseSession,
+    DatabaseConnection.pipe(Effect.andThen(({ db }) => FiberRef.make(createDatabaseSession(db))))
+  );
+}
 
 /**
  * Application and Domain Service Implementations
@@ -212,60 +222,44 @@ const DomainServiceLive = Layer.mergeAll(
   ProjectDomainPublisherLive
 );
 
-const DatabaseConnectionLive = Layer.scoped(
-  DatabaseConnection,
-  Effect.gen(function* () {
-    const connectionString = yield* Config.string('PROJECT_DB');
-    const client = createClient({ url: connectionString });
-    yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
-    return {
-      client,
-      db: new Kysely<DB>({ dialect: new LibsqlDialect({ client }) })
-    };
-  })
-);
-
-const DatabaseSessionLive = Layer.scoped(
-  DatabaseSession,
-  DatabaseConnection.pipe(Effect.andThen(({ db }) => FiberRef.make(createDatabaseSession(db))))
-);
-
 class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<
   TransactionEvents,
   PubSub.PubSub<keyof TransactionalBoundary>
->() {}
+>() {
+  public static live = Layer.effect(
+    TransactionEvents,
+    PubSub.sliding<keyof TransactionalBoundary>(10)
+  );
+}
 
-const TransactionEventsLive = Layer.effect(
-  TransactionEvents,
-  PubSub.sliding<keyof TransactionalBoundary>(10)
-);
-
-class NatsConnectionService extends Context.Tag('ProjectNatsConnection')<
-  NatsConnectionService,
+class NatsService extends Context.Tag('ProjectNatsConnection')<
+  NatsService,
   { jetstream: JetStreamClient; stream: StreamInfo }
->() {}
+>() {
+  public static live = Layer.scoped(
+    NatsService,
+    Effect.gen(function* () {
+      const connection = yield* Effect.promise(() => connect());
+      const jsm = yield* Effect.promise(() => connection.jetstreamManager());
+      const applicationName = yield* Config.string('APPLICATION_NAME');
+      const streamInfo = yield* Effect.promise(() =>
+        jsm.streams.add({
+          name: applicationName,
+          subjects: [`${applicationName}.>`],
+          retention: RetentionPolicy.Interest
+        })
+      );
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => connection.drain()).pipe(Effect.andThen(Effect.log('done')))
+      );
+      return { jetstream: connection.jetstream(), stream: streamInfo };
+    })
+  );
+}
 
-const NatsConnectionLive = Layer.scoped(
-  NatsConnectionService,
-  Effect.gen(function* () {
-    const connection = yield* Effect.promise(() => connect());
-    const jsm = yield* Effect.promise(() => connection.jetstreamManager());
-    const applicationName = yield* Config.string('APPLICATION_NAME');
-    const streamInfo = yield* Effect.promise(() =>
-      jsm.streams.add({
-        name: applicationName,
-        subjects: [`${applicationName}.>`],
-        retention: RetentionPolicy.Interest
-      })
-    );
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => connection.drain()).pipe(Effect.andThen(Effect.log('done')))
-    );
-    return { jetstream: connection.jetstream(), stream: streamInfo };
-  })
-);
-
-export const makeJawn = (session: DatabaseSessionService<DB, LibsqlError>): EventPublisher => {
+export const EventPublisherLive = (
+  session: DatabaseSessionService<DB, LibsqlError>
+): EventStore => {
   return {
     getUnpublished: () =>
       Effect.gen(function* () {
@@ -302,8 +296,8 @@ const Kralf = Layer.scopedDiscard(
     const pub = yield* TransactionEvents;
     const session = yield* DatabaseSession;
     const dequeue = yield* PubSub.subscribe(pub);
-    const { jetstream } = yield* NatsConnectionService;
-    const q = doThing(makeJawn(session), jetstream);
+    const { jetstream } = yield* NatsService;
+    const q = doThing(EventPublisherLive(session), jetstream);
     yield* Queue.take(dequeue)
       .pipe(
         Effect.map((a) => a === 'commit'),
@@ -316,18 +310,18 @@ const Kralf = Layer.scopedDiscard(
       )
       .pipe(Effect.forkScoped);
   })
-).pipe(Layer.provide(NatsConnectionLive));
+).pipe(Layer.provide(NatsService.live));
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,
   Effect.all([DatabaseConnection, DatabaseSession, TransactionEvents]).pipe(
     Effect.andThen((deps) => makeTransactionalBoundary(...deps))
   )
-).pipe(Layer.provide(Kralf), Layer.provide(TransactionEventsLive));
+).pipe(Layer.provide(Kralf), Layer.provide(TransactionEvents.live));
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
-  Layer.provideMerge(DatabaseSessionLive),
-  Layer.provideMerge(DatabaseConnectionLive)
+  Layer.provideMerge(DatabaseSession.live),
+  Layer.provideMerge(DatabaseConnection.live)
 );
 
 const runtime = ManagedRuntime.make(InfrastructureLive);

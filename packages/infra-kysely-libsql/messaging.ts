@@ -9,7 +9,7 @@ type Events = {
   context: string;
 }[];
 
-export type EventPublisher = {
+export type EventStore = {
   getUnpublished: () => Effect.Effect<Events, LibsqlError>;
   markPublished: (ids: string[]) => Effect.Effect<void, LibsqlError>;
 };
@@ -27,9 +27,14 @@ const publishEvents = (events: Events, jetstream: JetStreamClient) =>
     yield* Effect.log('publishing events');
   });
 
-export const doThing = (publisher: EventPublisher, jetstream: JetStreamClient) =>
-  Effect.gen(function* () {
-    const events = yield* publisher.getUnpublished();
-    yield* publishEvents(events, jetstream);
-    yield* publisher.markPublished(events.map((e) => e.id));
-  });
+export const doThing = (publisher: EventStore, jetstream: JetStreamClient) =>
+  publisher
+    .getUnpublished()
+    .pipe(
+      Effect.andThen((events) =>
+        Effect.zip(
+          publishEvents(events, jetstream),
+          publisher.markPublished(events.map((e) => e.id))
+        )
+      )
+    );
