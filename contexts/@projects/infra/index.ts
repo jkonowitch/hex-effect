@@ -42,7 +42,7 @@ import {
 } from '@hex-effect/infra-kysely-libsql';
 import { Kysely, sql } from 'kysely';
 import { jsonArrayFrom } from 'kysely/helpers/sqlite';
-import { connect, NatsConnection } from 'nats';
+import { connect, Empty, JetStreamClient, NatsConnection, RetentionPolicy, StreamInfo } from 'nats';
 import { asyncExitHook } from 'exit-hook';
 
 class DatabaseSession extends Context.Tag('ProjectDatabaseSession')<
@@ -241,17 +241,26 @@ const TransactionEventsLive = Layer.effect(
 
 class NatsConnectionService extends Context.Tag('ProjectNatsConnection')<
   NatsConnectionService,
-  { connection: NatsConnection }
+  { jetstream: JetStreamClient; stream: StreamInfo }
 >() {}
 
 const NatsConnectionLive = Layer.scoped(
   NatsConnectionService,
   Effect.gen(function* () {
     const connection = yield* Effect.promise(() => connect());
+    const jsm = yield* Effect.promise(() => connection.jetstreamManager());
+    const applicationName = yield* Config.string('APPLICATION_NAME');
+    const streamInfo = yield* Effect.promise(() =>
+      jsm.streams.add({
+        name: applicationName,
+        subjects: [`${applicationName}.>`],
+        retention: RetentionPolicy.Interest
+      })
+    );
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => connection.drain()).pipe(Effect.andThen(Effect.log('done')))
     );
-    return { connection };
+    return { jetstream: connection.jetstream(), stream: streamInfo };
   })
 );
 
@@ -289,7 +298,15 @@ const getEvents = Effect.gen(function* () {
 
 const publishEvents = (events: Shmee) =>
   Effect.gen(function* () {
-    const { connection } = yield* NatsConnectionService;
+    const { jetstream } = yield* NatsConnectionService;
+    const applicationName = yield* Config.string('APPLICATION_NAME');
+    yield* Effect.forEach(events, (event) =>
+      Effect.tryPromise(() =>
+        jetstream.publish(`${applicationName}.${event.context}.${event.tag}`, event.payload, {
+          timeout: 100
+        })
+      )
+    );
     yield* Effect.log('publishing events');
   });
 
@@ -323,11 +340,13 @@ const Kralf = Layer.scopedDiscard(
         Effect.if({
           onTrue: () =>
             Effect.retry(
-              getEvents.pipe(
-                Effect.flatMap((events) =>
-                  Effect.zip(publishEvents(events), markAsDelivered(events))
+              getEvents
+                .pipe(
+                  Effect.flatMap((events) =>
+                    Effect.zip(publishEvents(events), markAsDelivered(events))
+                  )
                 )
-              ),
+                .pipe(Effect.tapError((e) => Effect.logError(e))),
               { times: 3 }
             ),
           onFalse: () => Effect.void
