@@ -303,7 +303,7 @@ const publishEvents = (events: Shmee) =>
     yield* Effect.forEach(events, (event) =>
       Effect.tryPromise(() =>
         jetstream.publish(`${applicationName}.${event.context}.${event.tag}`, event.payload, {
-          timeout: 100
+          msgID: event.id
         })
       )
     );
