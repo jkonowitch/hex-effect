@@ -18,7 +18,7 @@ export type Modes = Exclude<TransactionSession['_tag'], 'None'>;
 
 export type TransactionalBoundary = {
   begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
-  commit(): Effect.Effect<void, never, Scope.Scope>;
+  commit(): Effect.Effect<void, never>;
   rollback(): Effect.Effect<void>;
 };
 
@@ -151,7 +151,6 @@ export const createDatabaseSession = <DB>(
       return Effect.promise(() => db.executeQuery(op));
     },
     write(op) {
-      console.log(op.sql, db.isTransaction);
       return Effect.promise(() => db.executeQuery(op));
     },
     queryBuilder: coldInstance as Kysely<DB>
@@ -165,8 +164,6 @@ const createBatchedDatabaseSession = <DB>(
   return {
     ...createDatabaseSession(hotInstance),
     write(op) {
-      console.log(op.sql, 'batchy');
-
       return FiberRef.update(transactionSession, (a) =>
         $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
       );
