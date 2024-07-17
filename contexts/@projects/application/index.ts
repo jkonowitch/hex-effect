@@ -12,7 +12,7 @@ import {
   TaskRepository,
   ProjectDomainEvents
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Scope, Context, Match } from 'effect';
+import { Effect, type Request, Option, pipe, Scope, Context, Match, Fiber } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -180,10 +180,15 @@ function withTransactionalBoundary(mode: Modes = 'Batched') {
     eff: Effect.Effect<A, E, R>
   ): Effect.Effect<A, E, ProjectTransactionalBoundary | Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
-      const tx = yield* ProjectTransactionalBoundary;
-      yield* tx.begin(mode);
-      const result = yield* eff.pipe(Effect.tapError(tx.rollback));
-      yield* tx.commit();
-      return result;
-    }).pipe(Effect.scoped);
+      const fiber = yield* Effect.gen(function* () {
+        const tx = yield* ProjectTransactionalBoundary;
+        yield* tx.begin(mode);
+        const result = yield* eff.pipe(Effect.tapError(tx.rollback));
+        yield* tx.commit();
+        return result;
+      }).pipe(Effect.scoped, Effect.fork);
+
+      const exit = yield* Fiber.await(fiber);
+      return yield* exit;
+    });
 }
