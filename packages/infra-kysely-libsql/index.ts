@@ -22,6 +22,11 @@ export type TransactionalBoundary = {
   rollback(): Effect.Effect<void>;
 };
 
+export type DatabaseConnection<DB> = {
+  db: Kysely<DB>;
+  client: Client;
+};
+
 type DBTX = {
   commit: Effect.Effect<void>;
   rollback: Effect.Effect<void>;
@@ -70,7 +75,7 @@ class RollbackError extends Data.TaggedError('RollbackError') {
 }
 
 export const makeTransactionalBoundary = <DB>(
-  connection: { client: Client; db: Kysely<DB> },
+  connection: DatabaseConnection<DB>,
   session: DatabaseSession<DB, LibsqlError>,
   pub: PubSub.PubSub<keyof TransactionalBoundary>
 ) => {
