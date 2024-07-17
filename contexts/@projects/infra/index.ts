@@ -1,5 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Effect, Context, Layer, Option, Ref, Config, PubSub, Queue, ManagedRuntime } from 'effect';
+import {
+  Effect,
+  Context,
+  Layer,
+  Option,
+  FiberRef,
+  Config,
+  PubSub,
+  Queue,
+  ManagedRuntime
+} from 'effect';
 import {
   Project,
   ProjectDomainEvents,
@@ -59,7 +69,7 @@ const ProjectRepositoryLive = Layer.effect(
       save: (project: Project) =>
         Effect.gen(function* () {
           const encoded = Schema.encodeSync(Project)(project);
-          const { write, queryBuilder } = yield* Ref.get(session);
+          const { write, queryBuilder } = yield* FiberRef.get(session);
           yield* write(
             queryBuilder
               .insertInto('projects')
@@ -70,7 +80,7 @@ const ProjectRepositoryLive = Layer.effect(
         }),
       findById: (id: (typeof ProjectId)['Type']) =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* Ref.get(session);
+          const { read, queryBuilder } = yield* FiberRef.get(session);
 
           const record = yield* read(
             queryBuilder.selectFrom('projects').selectAll().where('id', '=', id).compile()
@@ -113,7 +123,7 @@ const TaskRepositoryLive = Layer.effect(
       save: (task: Task) =>
         Effect.gen(function* () {
           const encoded = Schema.encodeSync(RefinedTask)(task);
-          const { write, queryBuilder } = yield* Ref.get(session);
+          const { write, queryBuilder } = yield* FiberRef.get(session);
           yield* write(
             queryBuilder
               .insertInto('tasks')
@@ -129,7 +139,7 @@ const TaskRepositoryLive = Layer.effect(
         }),
       findById: (id: (typeof TaskId)['Type']) =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* Ref.get(session);
+          const { read, queryBuilder } = yield* FiberRef.get(session);
 
           const record = yield* read(
             queryBuilder.selectFrom('tasks').selectAll().where('id', '=', id).compile()
@@ -149,7 +159,7 @@ const TaskRepositoryLive = Layer.effect(
         }),
       findAllByProjectId: (projectId: (typeof ProjectId)['Type']) =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* Ref.get(session);
+          const { read, queryBuilder } = yield* FiberRef.get(session);
 
           const { rows: records } = yield* read(
             queryBuilder
@@ -170,22 +180,26 @@ const TaskRepositoryLive = Layer.effect(
 const ProjectDomainPublisherLive = Layer.effect(
   ProjectDomainPublisher,
   Effect.gen(function* () {
-    const { write, queryBuilder } = yield* Ref.get(yield* DatabaseSession);
+    const session = yield* DatabaseSession;
 
     return {
       publish(event) {
         const encoded = Schema.encodeSync(ProjectDomainEvents)(event);
-        return write(
-          queryBuilder
-            .insertInto('events')
-            .values({
-              occurredOn: encoded.occurredOn,
-              id: encoded.messageId,
-              delivered: 0,
-              payload: JSON.stringify(encoded)
-            })
-            .compile()
-        ).pipe(Effect.orDie);
+        return FiberRef.get(session).pipe(
+          Effect.andThen(({ queryBuilder, write }) =>
+            write(
+              queryBuilder
+                .insertInto('events')
+                .values({
+                  occurredOn: encoded.occurredOn,
+                  id: encoded.messageId,
+                  delivered: 0,
+                  payload: JSON.stringify(encoded)
+                })
+                .compile()
+            ).pipe(Effect.orDie)
+          )
+        );
       }
     };
   })
@@ -210,9 +224,9 @@ const DatabaseConnectionLive = Layer.scoped(
   })
 );
 
-const DatabaseSessionLive = Layer.effect(
+const DatabaseSessionLive = Layer.scoped(
   DatabaseSession,
-  DatabaseConnection.pipe(Effect.andThen(({ db }) => Ref.make(createDatabaseSession(db))))
+  DatabaseConnection.pipe(Effect.andThen(({ db }) => FiberRef.make(createDatabaseSession(db))))
 );
 
 class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<

@@ -6,7 +6,7 @@ import type {
   DeleteResult,
   QueryResult
 } from 'kysely';
-import { Effect, Ref } from 'effect';
+import { Effect, FiberRef } from 'effect';
 
 type ExcludedTypes = [InsertResult, UpdateResult, DeleteResult];
 
@@ -17,7 +17,7 @@ export type ReadonlyQuery<C> =
       : CompiledQuery<T>
     : never;
 
-export type DatabaseSession<DB, E> = Ref.Ref<{
+export type DatabaseSession<DB, E> = FiberRef.FiberRef<{
   readonly write: (op: CompiledQuery) => Effect.Effect<void, E>;
   readonly read: <Q>(op: ReadonlyQuery<CompiledQuery<Q>>) => Effect.Effect<QueryResult<Q>, E>;
   readonly queryBuilder: Kysely<DB>;
