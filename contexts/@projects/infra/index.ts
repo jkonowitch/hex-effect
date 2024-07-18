@@ -87,7 +87,7 @@ const TransactionalBoundaryLive = Layer.effect(
   )
 ).pipe(Layer.provide(EventPublishingDaemon), Layer.provide(TransactionEvents.live));
 
-const InfrastructureLive = TransactionalBoundaryLive.pipe(
+const InfrastructureLive = q.pipe(
   Layer.provideMerge(EventStore.live),
   Layer.provideMerge(DatabaseSession.live),
   Layer.provideMerge(DatabaseConnection.live)
