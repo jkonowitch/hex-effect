@@ -1,6 +1,7 @@
 import { Schema } from '@effect/schema';
+import { EventHandlerService } from '@hex-effect/core';
 import { LibsqlError } from '@libsql/client';
-import { Effect } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 
 type Events = {
@@ -53,4 +54,17 @@ export const makePublishingPipeline = (eventStore: EventStoreService, natsServic
       )
     )
     .pipe(Effect.catchAll((e) => Effect.logError(e)));
+};
+
+export const makeEventHandlerService = <Tag>(
+  natsService: NatsService,
+  tag: Context.Tag<Tag, EventHandlerService>
+) => {
+  const s: EventHandlerService = {
+    register(eventSchema, triggers, handler, config) {
+      return Effect.log('Adding handler for ', triggers);
+    }
+  };
+
+  return Layer.succeed(tag, s);
 };

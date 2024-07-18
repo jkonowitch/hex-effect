@@ -5,4 +5,9 @@ export type {
   DatabaseConnection
 } from './src/transaction-boundary.js';
 export { makeTransactionalBoundary, createDatabaseSession } from './src/transaction-boundary.js';
-export { type EventStoreService, type NatsService, NatsSubject } from './src/messaging.js';
+export {
+  type EventStoreService,
+  type NatsService,
+  NatsSubject,
+  makeEventHandlerService
+} from './src/messaging.js';

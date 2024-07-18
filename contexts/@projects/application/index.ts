@@ -111,7 +111,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
-class ProjectEventHandlerService extends Context.Tag('ProjectEventHandlerService')<
+export class ProjectEventHandlerService extends Context.Tag('ProjectEventHandlerService')<
   ProjectEventHandlerService,
   EventHandlerService
 >() {}

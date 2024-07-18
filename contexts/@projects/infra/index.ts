@@ -1,8 +1,17 @@
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
-import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
+import {
+  router,
+  ProjectTransactionalBoundary,
+  CompleteTask,
+  registerEvents,
+  ProjectEventHandlerService
+} from '@projects/application';
 import { Router } from '@effect/rpc';
-import { makeTransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
+import {
+  makeEventHandlerService,
+  makeTransactionalBoundary
+} from '@hex-effect/infra-kysely-libsql';
 import { asyncExitHook } from 'exit-hook';
 import { DatabaseConnection, DatabaseSession, NatsService } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
@@ -16,7 +25,12 @@ const TransactionalBoundaryLive = Effect.all([
   .pipe(Effect.andThen((deps) => makeTransactionalBoundary(...deps, ProjectTransactionalBoundary)))
   .pipe(Layer.unwrapEffect);
 
+const EventHandlerLive = NatsService.pipe(
+  Effect.andThen((nats) => makeEventHandlerService(nats, ProjectEventHandlerService))
+).pipe(Layer.unwrapEffect);
+
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
+  Layer.provideMerge(EventHandlerLive),
   Layer.provideMerge(NatsService.live),
   Layer.provideMerge(EventStore.live),
   Layer.provideMerge(DatabaseSession.live),
@@ -33,7 +47,7 @@ const program = Effect.zip(
   { concurrent: true }
 );
 
-await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
+await registerEvents.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
 asyncExitHook(
