@@ -113,7 +113,7 @@ const streamEventsToHandler = <A, E, R>(
 
     yield* Effect.addFinalizer(() =>
       Effect.zipRight(
-        Effect.log(`closing stream ${consumerInfo.name}`),
+        Effect.logDebug(`closing stream ${consumerInfo.name}`),
         callNats(asynIter.close()).pipe(Effect.ignoreLogged)
       )
     );
@@ -172,4 +172,4 @@ const upsertConsumer = (
       );
     }
     // the only allowable error is handled above
-  }).pipe(Effect.orDie, Effect.tap(Effect.log(`Added handler for ${$durableName}`)));
+  }).pipe(Effect.orDie, Effect.tap(Effect.logDebug(`Added handler for ${$durableName}`)));

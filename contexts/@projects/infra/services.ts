@@ -21,7 +21,11 @@ export class DatabaseConnection extends Context.Tag('ProjectDatabaseConnection')
     Effect.gen(function* () {
       const connectionString = yield* Config.string('PROJECT_DB');
       const client = createClient({ url: connectionString });
-      yield* Effect.addFinalizer(() => Effect.sync(() => client.close()));
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => client.close()).pipe(
+          Effect.tap(Effect.logDebug('Database connection closed'))
+        )
+      );
       return {
         client,
         db: new Kysely<DB>({ dialect: new LibsqlDialect({ client }) })
@@ -56,7 +60,7 @@ export class NatsService extends Context.Tag('ProjectNatsConnection')<NatsServic
       );
       yield* Effect.addFinalizer(() =>
         Effect.promise(() => connection.drain()).pipe(
-          Effect.tap(Effect.log('Nats connection closed'))
+          Effect.tap(Effect.logDebug('Nats connection closed'))
         )
       );
       return {

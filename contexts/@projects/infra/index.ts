@@ -1,4 +1,4 @@
-import { Effect, Fiber, Layer, ManagedRuntime } from 'effect';
+import { Effect, Fiber, Layer, Logger, LogLevel, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import {
   router,
@@ -31,25 +31,26 @@ const EventHandlerLive = NatsService.pipe(
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(
   Layer.provideMerge(EventHandlerLive),
-  Layer.provideMerge(NatsService.live),
+  Layer.provide(NatsService.live),
   Layer.provideMerge(EventStore.live),
   Layer.provideMerge(DatabaseSession.live),
-  Layer.provideMerge(DatabaseConnection.live)
+  Layer.provide(DatabaseConnection.live)
 );
 
-const runtime = ManagedRuntime.make(InfrastructureLive);
+const runtime = ManagedRuntime.make(
+  InfrastructureLive.pipe(Layer.provide(Logger.minimumLogLevel(LogLevel.All)))
+);
 
 const handler = Router.toHandlerUndecoded(router);
 
-const program = Effect.zip(
+const program = Effect.zipLeft(
   handler(CompleteTask.make({ taskId: TaskId.make('SS8yZPEBhpn_6W1_hB0ay') })),
-  Effect.log('kralf'),
+  Effect.logDebug('Executing CompleteTask command'),
   { concurrent: true }
 );
 
 const eventDaemon = registerEvents.pipe(Effect.provide(DomainServiceLive), runtime.runFork);
 await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
-// await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
 asyncExitHook(
   async () => {
