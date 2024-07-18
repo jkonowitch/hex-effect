@@ -88,7 +88,7 @@ export const makeEventHandlerService = <Tag>(
         yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
           Effect.gen(function* () {
             const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
-            yield* handler(decoded);
+            yield* handler(decoded).pipe(Effect.annotateLogs('msgId', decoded.messageId));
           })
         );
       });
