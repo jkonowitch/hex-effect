@@ -113,7 +113,7 @@ export const makeTransactionalBoundary = <DB, S>(
     Effect.tryPromise(() =>
       natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
         msgID: event.id,
-        timeout: 100
+        timeout: 1000
       })
     );
 
