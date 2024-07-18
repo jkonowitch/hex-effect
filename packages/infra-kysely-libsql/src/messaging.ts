@@ -1,8 +1,10 @@
 import { Schema } from '@effect/schema';
 import { EventHandlerService } from '@hex-effect/core';
 import { LibsqlError } from '@libsql/client';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Data, Effect, Layer } from 'effect';
+import { UnknownException } from 'effect/Cause';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
+import { NatsError as RawNatsError } from 'nats';
 
 type Events = {
   id: string;
@@ -34,9 +36,21 @@ export type NatsService = {
   eventToSubject: (event: Events[number]) => NatsSubject;
 };
 
+class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
+  static isNatsError(e: unknown): e is RawNatsError {
+    return e instanceof RawNatsError;
+  }
+}
+
+const callNats = <T>(operation: Promise<T>) =>
+  Effect.tryPromise({
+    try: () => operation,
+    catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
+  }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
+
 export const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
   const publishEvent = (event: Events[number]) =>
-    Effect.tryPromise(() =>
+    callNats(
       natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
         msgID: event.id,
         timeout: 1000
@@ -62,9 +76,19 @@ export const makeEventHandlerService = <Tag>(
 ) => {
   const s: EventHandlerService = {
     register(eventSchema, triggers, handler, config) {
+      const decoded = Schema.decodeUnknownSync(eventSchema)('asdasd');
+      handler(decoded);
       return Effect.log('Adding handler for ', triggers);
     }
   };
 
   return Layer.succeed(tag, s);
 };
+
+// upsert consumer
+// create a stream from the async iterable
+// which hits the handler
+
+// const upsertConsumer = (natsService: NatsService) => Effect.gen(function*() {
+
+// })
