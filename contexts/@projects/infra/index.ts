@@ -2,12 +2,15 @@ import { Effect, Context, Layer, Config, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
-import { makeTransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
+import {
+  makeTransactionalBoundary,
+  type NatsService,
+  NatsSubject
+} from '@hex-effect/infra-kysely-libsql';
 import { connect, RetentionPolicy } from 'nats';
 import { asyncExitHook } from 'exit-hook';
 import { DatabaseConnection, DatabaseSession } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
-import { NatsService, NatsSubject } from '@hex-effect/infra-kysely-libsql/messaging.js';
 
 // all of this stuff can now exist "inside" the transaction boundary
 

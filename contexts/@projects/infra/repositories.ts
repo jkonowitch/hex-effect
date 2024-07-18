@@ -17,7 +17,7 @@ import { Layer, Effect, FiberRef, Option, Context } from 'effect';
 import { omit } from 'effect/Struct';
 import { nanoid } from 'nanoid';
 import { DatabaseSession } from './services.js';
-import { EventStoreService } from '@hex-effect/infra-kysely-libsql/messaging.js';
+import { EventStoreService } from '@hex-effect/infra-kysely-libsql';
 
 const ProjectRepositoryLive = Layer.effect(
   ProjectRepository,
