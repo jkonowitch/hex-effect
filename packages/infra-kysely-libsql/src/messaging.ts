@@ -4,7 +4,13 @@ import { LibsqlError } from '@libsql/client';
 import { Context, Data, Effect, Layer, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
-import type { ConsumerUpdateConfig, JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
+import type {
+  ConsumerInfo,
+  ConsumerUpdateConfig,
+  JetStreamClient,
+  JetStreamManager,
+  StreamInfo
+} from 'nats';
 import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
 
 type Events = {
@@ -77,18 +83,11 @@ export const makeEventHandlerService = <Tag>(
 ) => {
   const s: EventHandlerService = {
     register(eventSchema, triggers, handler, config) {
-      Effect.gen(function* () {
+      return Effect.gen(function* () {
         const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
-
-        // const consumer = yield* callNats(
-        //   natsService.jetstream.consumers.get(natsService.streamInfo.config.name, consumerInfo.name)
-        // );
-
-        // const asynIter = yield* callNats(consumer.consume());
-
-        // const a = Stream.fromAsyncIterable(asynIter, (e) => new Error(`${e}`));
+        yield* kralf(consumerInfo, natsService);
       });
-      return upsertConsumer(natsService, config.$durableName, triggers).pipe(Effect.ignore);
+      // return upsertConsumer(natsService, config.$durableName, triggers).pipe(Effect.ignore);
     }
   };
 
@@ -98,6 +97,27 @@ export const makeEventHandlerService = <Tag>(
 // upsert consumer
 // create a stream from the async iterable
 // which hits the handler
+
+const kralf = (consumerInfo: ConsumerInfo, natsService: NatsService) =>
+  Effect.gen(function* () {
+    const consumer = yield* callNats(
+      natsService.jetstream.consumers.get(natsService.streamInfo.config.name, consumerInfo.name)
+    );
+
+    const asynIter = yield* callNats(consumer.consume());
+    const stream = Stream.fromAsyncIterable(asynIter, (e) => new Error(`${e}`));
+
+    yield* Effect.addFinalizer(() =>
+      Effect.zipRight(
+        Effect.log(`closing stream ${consumerInfo.name}`),
+        callNats(asynIter.close()).pipe(Effect.ignoreLogged)
+      )
+    );
+
+    yield* Stream.runForEach(stream, (msg) =>
+      Effect.zip(Effect.log('Yass'), callNats(msg.ackAck()))
+    );
+  }).pipe(Effect.scoped, Effect.orDie);
 
 const upsertConsumer = (
   natsService: NatsService,

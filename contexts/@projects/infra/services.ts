@@ -55,7 +55,9 @@ export class NatsService extends Context.Tag('ProjectNatsConnection')<NatsServic
         })
       );
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => connection.drain()).pipe(Effect.andThen(Effect.log('done')))
+        Effect.promise(() => connection.drain()).pipe(
+          Effect.tap(Effect.log('Nats connection closed'))
+        )
       );
       return {
         jetstream: connection.jetstream(),

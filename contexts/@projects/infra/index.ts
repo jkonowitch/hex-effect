@@ -47,11 +47,12 @@ const program = Effect.zip(
   { concurrent: true }
 );
 
-await registerEvents.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
+const r = registerEvents.pipe(Effect.provide(DomainServiceLive), runtime.runFork);
 await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
 asyncExitHook(
   async () => {
+    await runtime.runPromise(r.interruptAsFork(r.id()));
     await runtime.dispose();
   },
   { wait: 500 }
