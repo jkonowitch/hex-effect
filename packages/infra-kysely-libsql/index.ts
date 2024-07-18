@@ -18,7 +18,8 @@ import {
   pipe,
   Context,
   Layer,
-  Queue
+  Queue,
+  Equal
 } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { Client, InValue, LibsqlError } from '@libsql/client';
@@ -88,7 +89,7 @@ class RollbackError extends Data.TaggedError('RollbackError') {
   }
 }
 
-export const makeTransactionalBoundary2 = <DB, S>(
+export const makeTransactionalBoundary = <DB, S>(
   connection: DatabaseConnection<DB>,
   session: DatabaseSession<DB, LibsqlError>,
   eventStore: EventStoreService,
@@ -111,7 +112,8 @@ export const makeTransactionalBoundary2 = <DB, S>(
   const publishEvent = (event: Events[number]) =>
     Effect.tryPromise(() =>
       natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
-        msgID: event.id
+        msgID: event.id,
+        timeout: 100
       })
     );
 
@@ -124,7 +126,8 @@ export const makeTransactionalBoundary2 = <DB, S>(
           eventStore.markPublished(events.map((e) => e.id))
         )
       )
-    );
+    )
+    .pipe(Effect.catchAll((e) => Effect.logError(e)));
 
   const EventPublishingDaemon = Layer.scopedDiscard(
     Effect.gen(function* () {
@@ -132,7 +135,7 @@ export const makeTransactionalBoundary2 = <DB, S>(
       const dequeue = yield* PubSub.subscribe(pub);
       yield* Queue.take(dequeue)
         .pipe(
-          Effect.map((a) => a === 'commit'),
+          Effect.map(Equal.equals('commit')),
           Effect.if({
             onTrue: () => publishingPipeline,
             onFalse: () => Effect.void
@@ -206,69 +209,6 @@ export const makeTransactionalBoundary2 = <DB, S>(
   );
 
   return layer;
-};
-
-export const makeTransactionalBoundary = <DB>(
-  connection: DatabaseConnection<DB>,
-  session: DatabaseSession<DB, LibsqlError>,
-  pub: PubSub.PubSub<keyof TransactionalBoundary>
-) => {
-  const { client, db } = connection;
-  let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
-
-  const boundary: TransactionalBoundary = {
-    begin: (mode) =>
-      Match.value(mode)
-        .pipe(
-          Match.when('Batched', () =>
-            Effect.gen(function* () {
-              const ref = yield* FiberRef.make<TransactionSession>(Batched({ writes: [] }));
-              maybeTransactionSession = Option.some(ref);
-              yield* FiberRef.set(session, createBatchedDatabaseSession(db, ref));
-            })
-          ),
-          Match.when('Serialized', () =>
-            Effect.gen(function* () {
-              const tx = yield* initiateTransaction(db);
-              const ref = yield* FiberRef.make<TransactionSession>(Serialized({ tx }));
-              maybeTransactionSession = Option.some(ref);
-              yield* FiberRef.set(session, createDatabaseSession(tx.tx));
-            })
-          ),
-          Match.exhaustive
-        )
-        .pipe(Effect.tap(() => PubSub.publish(pub, 'begin'))),
-    commit: () =>
-      // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-      FiberRef.get(Option.getOrThrow(maybeTransactionSession)).pipe(
-        Effect.flatMap(
-          $match({
-            Serialized: ({ tx }) => tx.commit,
-            Batched: ({ writes }) =>
-              Effect.promise(() =>
-                client.batch(
-                  writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
-                )
-              )
-          })
-        ),
-        Effect.tap(() => PubSub.publish(pub, 'commit'))
-      ),
-    rollback: () =>
-      pipe(
-        Option.getOrThrow(maybeTransactionSession),
-        (ref) => Effect.zip(FiberRef.get(ref), Effect.succeed(ref)),
-        Effect.flatMap(([transactionSession, ref]) =>
-          $match({
-            Serialized: ({ tx }) => tx.rollback,
-            Batched: (a) => FiberRef.set(ref, { ...a, writes: [] })
-          })(transactionSession)
-        ),
-        Effect.tap(() => PubSub.publish(pub, 'rollback'))
-      )
-  };
-
-  return boundary;
 };
 
 const coldInstance = new Kysely<unknown>({

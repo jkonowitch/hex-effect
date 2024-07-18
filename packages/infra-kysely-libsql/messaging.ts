@@ -22,7 +22,7 @@ export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
   EventTag: Schema.String
 }) {
   get asSubject(): string {
-    return `${this.ApplicationNamespace}.${this.BoundedContext}.${this.EventTag}`;
+    return `s${this.ApplicationNamespace}.${this.BoundedContext}.${this.EventTag}`;
   }
 }
 

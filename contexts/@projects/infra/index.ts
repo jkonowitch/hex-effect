@@ -2,7 +2,7 @@ import { Effect, Context, Layer, Config, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
-import { makeTransactionalBoundary2 } from '@hex-effect/infra-kysely-libsql';
+import { makeTransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
 import { connect, RetentionPolicy } from 'nats';
 import { asyncExitHook } from 'exit-hook';
 import { DatabaseConnection, DatabaseSession } from './services.js';
@@ -53,36 +53,9 @@ class ProjectNatsService extends Context.Tag('ProjectNatsConnection')<
   );
 }
 
-// const EventPublishingDaemon = Layer.scopedDiscard(
-//   Effect.gen(function* () {
-//     const pub = yield* TransactionEvents;
-//     const dequeue = yield* PubSub.subscribe(pub);
-//     const { jetstream } = yield* NatsService;
-//     const q = doThing(yield* EventStore, jetstream);
-//     yield* Queue.take(dequeue)
-//       .pipe(
-//         Effect.map((a) => a === 'commit'),
-//         Effect.if({
-//           onTrue: () =>
-//             Effect.retry(q.pipe(Effect.tapError((e) => Effect.logError(e))), { times: 3 }),
-//           onFalse: () => Effect.void
-//         }),
-//         Effect.forever
-//       )
-//       .pipe(Effect.forkScoped);
-//   })
-// ).pipe(Layer.provide(NatsService.live));
-
 const q = Effect.all([DatabaseConnection, DatabaseSession, EventStore, ProjectNatsService])
-  .pipe(Effect.andThen((deps) => makeTransactionalBoundary2(...deps, ProjectTransactionalBoundary)))
+  .pipe(Effect.andThen((deps) => makeTransactionalBoundary(...deps, ProjectTransactionalBoundary)))
   .pipe(Layer.unwrapEffect);
-
-// const TransactionalBoundaryLive = Layer.effect(
-//   ProjectTransactionalBoundary,
-//   Effect.all([DatabaseConnection, DatabaseSession, TransactionEvents]).pipe(
-//     Effect.andThen((deps) => makeTransactionalBoundary(...deps))
-//   )
-// ).pipe(Layer.provide(EventPublishingDaemon), Layer.provide(TransactionEvents.live));
 
 const InfrastructureLive = q.pipe(
   Layer.provideMerge(ProjectNatsService.live),
