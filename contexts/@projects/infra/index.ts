@@ -2,10 +2,10 @@ import { Effect, Layer, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import {
   router,
-  ProjectTransactionalBoundary,
+  TransactionalBoundary,
   CompleteTask,
   registerEvents,
-  ProjectEventHandlerService
+  EventHandlerService
 } from '@projects/application';
 import { Router } from '@effect/rpc';
 import {
@@ -22,11 +22,11 @@ const TransactionalBoundaryLive = Effect.all([
   EventStore,
   NatsService
 ])
-  .pipe(Effect.andThen((deps) => makeTransactionalBoundary(...deps, ProjectTransactionalBoundary)))
+  .pipe(Effect.andThen((deps) => makeTransactionalBoundary(...deps, TransactionalBoundary)))
   .pipe(Layer.unwrapEffect);
 
 const EventHandlerLive = NatsService.pipe(
-  Effect.andThen((nats) => makeEventHandlerService(nats, ProjectEventHandlerService))
+  Effect.andThen((nats) => makeEventHandlerService(nats, EventHandlerService))
 ).pipe(Layer.unwrapEffect);
 
 const InfrastructureLive = TransactionalBoundaryLive.pipe(

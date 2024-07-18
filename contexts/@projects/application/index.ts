@@ -1,7 +1,10 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import { EventHandlerService } from '@hex-effect/core';
-import type { Modes, TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
+import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
+import type {
+  Modes,
+  TransactionalBoundary as ITransactionalBoundary
+} from '@hex-effect/infra-kysely-libsql';
 import {
   Project,
   TaskCompletedEvent,
@@ -62,9 +65,9 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
  * Application Services
  */
 
-export class ProjectTransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
-  ProjectTransactionalBoundary,
-  TransactionalBoundary
+export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
+  TransactionalBoundary,
+  ITransactionalBoundary
 >() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
@@ -111,9 +114,9 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
-export class ProjectEventHandlerService extends Context.Tag('ProjectEventHandlerService')<
-  ProjectEventHandlerService,
-  EventHandlerService
+export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
+  EventHandlerService,
+  IEventHandlerService
 >() {}
 
 const sendEmailAfterTaskCompleted = (e: (typeof TaskCompletedEvent)['Type']) =>
@@ -132,7 +135,7 @@ const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
   );
 
 export const registerEvents = Effect.gen(function* () {
-  const { register } = yield* ProjectEventHandlerService;
+  const { register } = yield* EventHandlerService;
 
   yield* Effect.all(
     [
@@ -186,10 +189,10 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
 function withTransactionalBoundary(mode: Modes = 'Batched') {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, ProjectTransactionalBoundary | Exclude<R, Scope.Scope>> =>
+  ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
       const fiber = yield* Effect.gen(function* () {
-        const tx = yield* ProjectTransactionalBoundary;
+        const tx = yield* TransactionalBoundary;
         yield* tx.begin(mode);
         const result = yield* eff.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();

@@ -10,7 +10,7 @@ import {
   Task,
   TaskRepository,
   TaskId,
-  ProjectDomainPublisher,
+  DomainPublisher,
   ProjectDomainEvents
 } from '@projects/domain';
 import { Layer, Effect, FiberRef, Option, Context } from 'effect';
@@ -137,8 +137,8 @@ const TaskRepositoryLive = Layer.effect(
   )
 );
 
-const ProjectDomainPublisherLive = Layer.effect(
-  ProjectDomainPublisher,
+const DomainPublisherLive = Layer.effect(
+  DomainPublisher,
   Effect.gen(function* () {
     const eventStore = yield* EventStore;
 
@@ -207,5 +207,5 @@ export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, Eve
 export const DomainServiceLive = Layer.mergeAll(
   TaskRepositoryLive,
   ProjectRepositoryLive,
-  ProjectDomainPublisherLive
+  DomainPublisherLive
 );
