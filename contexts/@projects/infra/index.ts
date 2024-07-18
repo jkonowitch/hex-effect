@@ -3,10 +3,11 @@ import { TaskId } from '@projects/domain';
 import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
 import { makeTransactionalBoundary2 } from '@hex-effect/infra-kysely-libsql';
-import { connect, JetStreamClient, RetentionPolicy, StreamInfo } from 'nats';
+import { connect, RetentionPolicy } from 'nats';
 import { asyncExitHook } from 'exit-hook';
 import { DatabaseConnection, DatabaseSession } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
+import { NatsService, NatsSubject } from '@hex-effect/infra-kysely-libsql/messaging.js';
 
 // all of this stuff can now exist "inside" the transaction boundary
 
@@ -16,18 +17,18 @@ import { DomainServiceLive, EventStore } from './repositories.js';
 
 // and into the yet to be implemented EventHandlerService
 
-class NatsService extends Context.Tag('ProjectNatsConnection')<
-  NatsService,
-  { jetstream: JetStreamClient; stream: StreamInfo }
+class ProjectNatsService extends Context.Tag('ProjectNatsConnection')<
+  ProjectNatsService,
+  NatsService
 >() {
   public static live = Layer.scoped(
-    NatsService,
+    ProjectNatsService,
     Effect.gen(function* () {
       const connection = yield* Effect.promise(() => connect());
-      const jsm = yield* Effect.promise(() => connection.jetstreamManager());
+      const jetstreamManager = yield* Effect.promise(() => connection.jetstreamManager());
       const applicationName = yield* Config.string('APPLICATION_NAME');
       const streamInfo = yield* Effect.promise(() =>
-        jsm.streams.add({
+        jetstreamManager.streams.add({
           name: applicationName,
           subjects: [`${applicationName}.>`],
           retention: RetentionPolicy.Interest
@@ -36,7 +37,18 @@ class NatsService extends Context.Tag('ProjectNatsConnection')<
       yield* Effect.addFinalizer(() =>
         Effect.promise(() => connection.drain()).pipe(Effect.andThen(Effect.log('done')))
       );
-      return { jetstream: connection.jetstream(), stream: streamInfo };
+      return {
+        jetstream: connection.jetstream(),
+        streamInfo: streamInfo,
+        jetstreamManager,
+        eventToSubject: (event) => {
+          return NatsSubject.make({
+            ApplicationNamespace: applicationName,
+            BoundedContext: event.context,
+            EventTag: event.tag
+          });
+        }
+      };
     })
   );
 }
@@ -61,7 +73,7 @@ class NatsService extends Context.Tag('ProjectNatsConnection')<
 //   })
 // ).pipe(Layer.provide(NatsService.live));
 
-const q = Effect.all([DatabaseConnection, DatabaseSession, EventStore])
+const q = Effect.all([DatabaseConnection, DatabaseSession, EventStore, ProjectNatsService])
   .pipe(Effect.andThen((deps) => makeTransactionalBoundary2(...deps, ProjectTransactionalBoundary)))
   .pipe(Layer.unwrapEffect);
 
@@ -73,6 +85,7 @@ const q = Effect.all([DatabaseConnection, DatabaseSession, EventStore])
 // ).pipe(Layer.provide(EventPublishingDaemon), Layer.provide(TransactionEvents.live));
 
 const InfrastructureLive = q.pipe(
+  Layer.provideMerge(ProjectNatsService.live),
   Layer.provideMerge(EventStore.live),
   Layer.provideMerge(DatabaseSession.live),
   Layer.provideMerge(DatabaseConnection.live)

@@ -3,7 +3,7 @@ import { LibsqlError } from '@libsql/client';
 import { Config, Effect } from 'effect';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 
-type Events = {
+export type Events = {
   id: string;
   payload: string;
   tag: string;
