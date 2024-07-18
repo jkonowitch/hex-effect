@@ -3,8 +3,9 @@ import { EventHandlerService } from '@hex-effect/core';
 import { LibsqlError } from '@libsql/client';
 import { Context, Data, Effect, Layer } from 'effect';
 import { UnknownException } from 'effect/Cause';
-import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
-import { NatsError as RawNatsError } from 'nats';
+import { constTrue } from 'effect/Function';
+import type { ConsumerUpdateConfig, JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
+import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
 
 type Events = {
   id: string;
@@ -33,7 +34,7 @@ export type NatsService = {
   jetstream: JetStreamClient;
   jetstreamManager: JetStreamManager;
   streamInfo: StreamInfo;
-  eventToSubject: (event: Events[number]) => NatsSubject;
+  eventToSubject: (event: Pick<Events[number], 'context' | 'tag'>) => NatsSubject;
 };
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
@@ -89,6 +90,43 @@ export const makeEventHandlerService = <Tag>(
 // create a stream from the async iterable
 // which hits the handler
 
-// const upsertConsumer = (natsService: NatsService) => Effect.gen(function*() {
+const upsertConsumer = (
+  natsService: NatsService,
+  $durableName: string,
+  triggers: { context: string; tag: string }[]
+) =>
+  Effect.gen(function* () {
+    const config: ConsumerUpdateConfig = {
+      max_deliver: 3,
+      filter_subjects: triggers.map((t) => natsService.eventToSubject(t).asSubject)
+    };
 
-// })
+    const consumerExists = yield* callNats(
+      natsService.jetstreamManager.consumers.info(natsService.streamInfo.config.name, $durableName)
+    ).pipe(
+      Effect.map(constTrue),
+      Effect.catchIf(
+        (e) => e.raw.code === ErrorCode.JetStream404NoMessages,
+        () => Effect.succeed(false)
+      )
+    );
+
+    if (consumerExists) {
+      return yield* callNats(
+        natsService.jetstreamManager.consumers.update(
+          natsService.streamInfo.config.name,
+          $durableName,
+          config
+        )
+      );
+    } else {
+      return yield* callNats(
+        natsService.jetstreamManager.consumers.add(natsService.streamInfo.config.name, {
+          ...config,
+          ack_policy: AckPolicy.Explicit,
+          durable_name: $durableName
+        })
+      );
+    }
+    // the only allowable error is handled above
+  }).pipe(Effect.orDie);
