@@ -1,7 +1,7 @@
 import { Schema } from '@effect/schema';
 import { EventHandlerService } from '@hex-effect/core';
 import { LibsqlError } from '@libsql/client';
-import { Context, Data, Effect, Layer } from 'effect';
+import { Context, Data, Effect, Layer, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
 import type { ConsumerUpdateConfig, JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
@@ -77,9 +77,20 @@ export const makeEventHandlerService = <Tag>(
 ) => {
   const s: EventHandlerService = {
     register(eventSchema, triggers, handler, config) {
-      const decoded = Schema.decodeUnknownSync(eventSchema)('asdasd');
-      handler(decoded);
-      return Effect.log('Adding handler for ', triggers);
+      Effect.gen(function* () {
+        const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
+
+        // const consumer = yield* callNats(
+        //   natsService.jetstream.consumers.get(natsService.streamInfo.config.name, consumerInfo.name)
+        // );
+
+        // const asynIter = yield* callNats(consumer.consume());
+
+        // const a = Stream.fromAsyncIterable(asynIter, (e) => new Error(`${e}`));
+      });
+      return upsertConsumer(natsService, config.$durableName, triggers).pipe(
+        Effect.andThen((a) => Effect.log('Adding handler for ', triggers))
+      );
     }
   };
 
