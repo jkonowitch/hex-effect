@@ -88,9 +88,7 @@ export const makeEventHandlerService = <Tag>(
 
         // const a = Stream.fromAsyncIterable(asynIter, (e) => new Error(`${e}`));
       });
-      return upsertConsumer(natsService, config.$durableName, triggers).pipe(
-        Effect.andThen((a) => Effect.log('Adding handler for ', triggers))
-      );
+      return upsertConsumer(natsService, config.$durableName, triggers).pipe(Effect.ignore);
     }
   };
 
@@ -140,4 +138,4 @@ const upsertConsumer = (
       );
     }
     // the only allowable error is handled above
-  }).pipe(Effect.orDie);
+  }).pipe(Effect.orDie, Effect.tap(Effect.log(`Added handler for ${$durableName}`)));
