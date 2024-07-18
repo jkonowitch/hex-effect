@@ -2,12 +2,24 @@ import { Effect, Context, Layer, Config, PubSub, Queue, ManagedRuntime } from 'e
 import { TaskId } from '@projects/domain';
 import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
-import { makeTransactionalBoundary, TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
+import {
+  makeTransactionalBoundary,
+  makeTransactionalBoundary2,
+  TransactionalBoundary
+} from '@hex-effect/infra-kysely-libsql';
 import { connect, JetStreamClient, RetentionPolicy, StreamInfo } from 'nats';
 import { asyncExitHook } from 'exit-hook';
 import { doThing } from '@hex-effect/infra-kysely-libsql/messaging.js';
 import { DatabaseConnection, DatabaseSession } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
+
+// all of this stuff can now exist "inside" the transaction boundary
+
+// In the services.js file, there will be a Nats connection service, defined in the hex-effect package,
+// which exposes the jetstream, jetstream manager, and stream info
+// that gets passed in to the transactional boundary (for publishing)
+
+// and into the yet to be implemented EventHandlerService
 
 class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<
   TransactionEvents,
@@ -63,6 +75,10 @@ const EventPublishingDaemon = Layer.scopedDiscard(
       .pipe(Effect.forkScoped);
   })
 ).pipe(Layer.provide(NatsService.live));
+
+const q = Effect.zip(DatabaseConnection, DatabaseSession)
+  .pipe(Effect.andThen((deps) => makeTransactionalBoundary2(...deps, ProjectTransactionalBoundary)))
+  .pipe(Layer.unwrapEffect);
 
 const TransactionalBoundaryLive = Layer.effect(
   ProjectTransactionalBoundary,

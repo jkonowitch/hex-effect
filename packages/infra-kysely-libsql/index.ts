@@ -7,7 +7,7 @@ import {
   Transaction,
   type CompiledQuery
 } from 'kysely';
-import { Effect, FiberRef, Scope, Data, Match, PubSub, Option, pipe } from 'effect';
+import { Effect, FiberRef, Scope, Data, Match, PubSub, Option, pipe, Context, Layer } from 'effect';
 import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { Client, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
@@ -73,6 +73,67 @@ class RollbackError extends Data.TaggedError('RollbackError') {
     return e instanceof this && e._tag === 'RollbackError';
   }
 }
+
+export const makeTransactionalBoundary2 = <DB, S>(
+  connection: DatabaseConnection<DB>,
+  session: DatabaseSession<DB, LibsqlError>,
+  tag: Context.Tag<S, TransactionalBoundary>
+) => {
+  const { client, db } = connection;
+  let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
+
+  const boundary: TransactionalBoundary = {
+    begin: (mode) =>
+      Match.value(mode).pipe(
+        Match.when('Batched', () =>
+          Effect.gen(function* () {
+            const ref = yield* FiberRef.make<TransactionSession>(Batched({ writes: [] }));
+            maybeTransactionSession = Option.some(ref);
+            yield* FiberRef.set(session, createBatchedDatabaseSession(db, ref));
+          })
+        ),
+        Match.when('Serialized', () =>
+          Effect.gen(function* () {
+            const tx = yield* initiateTransaction(db);
+            const ref = yield* FiberRef.make<TransactionSession>(Serialized({ tx }));
+            maybeTransactionSession = Option.some(ref);
+            yield* FiberRef.set(session, createDatabaseSession(tx.tx));
+          })
+        ),
+        Match.exhaustive
+      ),
+    commit: () =>
+      // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
+      FiberRef.get(Option.getOrThrow(maybeTransactionSession)).pipe(
+        Effect.flatMap(
+          $match({
+            Serialized: ({ tx }) => tx.commit,
+            Batched: ({ writes }) =>
+              Effect.promise(() =>
+                client.batch(
+                  writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
+                )
+              )
+          })
+        )
+      ),
+    rollback: () =>
+      pipe(
+        Option.getOrThrow(maybeTransactionSession),
+        (ref) => Effect.zip(FiberRef.get(ref), Effect.succeed(ref)),
+        Effect.flatMap(([transactionSession, ref]) =>
+          $match({
+            Serialized: ({ tx }) => tx.rollback,
+            Batched: (a) => FiberRef.set(ref, { ...a, writes: [] })
+          })(transactionSession)
+        )
+      )
+  };
+
+  const layer = Layer.succeed(tag, boundary);
+
+  return layer;
+};
 
 export const makeTransactionalBoundary = <DB>(
   connection: DatabaseConnection<DB>,
