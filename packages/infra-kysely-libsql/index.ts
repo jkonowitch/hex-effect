@@ -25,7 +25,7 @@ import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { Client, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { nanoid } from 'nanoid';
-import { Events, EventStoreService, NatsService } from './messaging.js';
+import { EventStoreService, makePublishingPipeline, NatsService } from './messaging.js';
 
 export { LibsqlDialect };
 
@@ -109,25 +109,7 @@ export const makeTransactionalBoundary = <DB, S>(
     );
   }
 
-  const publishEvent = (event: Events[number]) =>
-    Effect.tryPromise(() =>
-      natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
-        msgID: event.id,
-        timeout: 1000
-      })
-    );
-
-  const publishingPipeline = eventStore
-    .getUnpublished()
-    .pipe(
-      Effect.andThen((events) =>
-        Effect.zip(
-          Effect.forEach(events, publishEvent),
-          eventStore.markPublished(events.map((e) => e.id))
-        )
-      )
-    )
-    .pipe(Effect.catchAll((e) => Effect.logError(e)));
+  const publishingPipeline = makePublishingPipeline(eventStore, natsService);
 
   const EventPublishingDaemon = Layer.scopedDiscard(
     Effect.gen(function* () {

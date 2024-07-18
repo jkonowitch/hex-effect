@@ -1,9 +1,9 @@
 import { Schema } from '@effect/schema';
 import { LibsqlError } from '@libsql/client';
-import { Config, Effect } from 'effect';
+import { Effect } from 'effect';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 
-export type Events = {
+type Events = {
   id: string;
   payload: string;
   tag: string;
@@ -33,27 +33,24 @@ export type NatsService = {
   eventToSubject: (event: Events[number]) => NatsSubject;
 };
 
-const publishEvents = (events: Events, jetstream: JetStreamClient) =>
-  Effect.gen(function* () {
-    const applicationName = yield* Config.string('APPLICATION_NAME');
-    yield* Effect.forEach(events, (event) =>
-      Effect.tryPromise(() =>
-        jetstream.publish(`${applicationName}.${event.context}.${event.tag}`, event.payload, {
-          msgID: event.id
-        })
-      )
+export const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
+  const publishEvent = (event: Events[number]) =>
+    Effect.tryPromise(() =>
+      natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
+        msgID: event.id,
+        timeout: 1000
+      })
     );
-    yield* Effect.log('publishing events');
-  });
 
-export const doThing = (publisher: EventStoreService, jetstream: JetStreamClient) =>
-  publisher
+  return eventStore
     .getUnpublished()
     .pipe(
       Effect.andThen((events) =>
         Effect.zip(
-          publishEvents(events, jetstream),
-          publisher.markPublished(events.map((e) => e.id))
+          Effect.forEach(events, publishEvent),
+          eventStore.markPublished(events.map((e) => e.id))
         )
       )
-    );
+    )
+    .pipe(Effect.catchAll((e) => Effect.logError(e)));
+};
