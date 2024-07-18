@@ -1,15 +1,10 @@
-import { Effect, Context, Layer, Config, PubSub, Queue, ManagedRuntime } from 'effect';
+import { Effect, Context, Layer, Config, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import { router, ProjectTransactionalBoundary, CompleteTask } from '@projects/application';
 import { Router } from '@effect/rpc';
-import {
-  makeTransactionalBoundary,
-  makeTransactionalBoundary2,
-  TransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql';
+import { makeTransactionalBoundary2 } from '@hex-effect/infra-kysely-libsql';
 import { connect, JetStreamClient, RetentionPolicy, StreamInfo } from 'nats';
 import { asyncExitHook } from 'exit-hook';
-import { doThing } from '@hex-effect/infra-kysely-libsql/messaging.js';
 import { DatabaseConnection, DatabaseSession } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
 
@@ -20,16 +15,6 @@ import { DomainServiceLive, EventStore } from './repositories.js';
 // that gets passed in to the transactional boundary (for publishing)
 
 // and into the yet to be implemented EventHandlerService
-
-class TransactionEvents extends Context.Tag('ProjectTransactionEvents')<
-  TransactionEvents,
-  PubSub.PubSub<keyof TransactionalBoundary>
->() {
-  public static live = Layer.effect(
-    TransactionEvents,
-    PubSub.sliding<keyof TransactionalBoundary>(10)
-  );
-}
 
 class NatsService extends Context.Tag('ProjectNatsConnection')<
   NatsService,
@@ -56,36 +41,36 @@ class NatsService extends Context.Tag('ProjectNatsConnection')<
   );
 }
 
-const EventPublishingDaemon = Layer.scopedDiscard(
-  Effect.gen(function* () {
-    const pub = yield* TransactionEvents;
-    const dequeue = yield* PubSub.subscribe(pub);
-    const { jetstream } = yield* NatsService;
-    const q = doThing(yield* EventStore, jetstream);
-    yield* Queue.take(dequeue)
-      .pipe(
-        Effect.map((a) => a === 'commit'),
-        Effect.if({
-          onTrue: () =>
-            Effect.retry(q.pipe(Effect.tapError((e) => Effect.logError(e))), { times: 3 }),
-          onFalse: () => Effect.void
-        }),
-        Effect.forever
-      )
-      .pipe(Effect.forkScoped);
-  })
-).pipe(Layer.provide(NatsService.live));
+// const EventPublishingDaemon = Layer.scopedDiscard(
+//   Effect.gen(function* () {
+//     const pub = yield* TransactionEvents;
+//     const dequeue = yield* PubSub.subscribe(pub);
+//     const { jetstream } = yield* NatsService;
+//     const q = doThing(yield* EventStore, jetstream);
+//     yield* Queue.take(dequeue)
+//       .pipe(
+//         Effect.map((a) => a === 'commit'),
+//         Effect.if({
+//           onTrue: () =>
+//             Effect.retry(q.pipe(Effect.tapError((e) => Effect.logError(e))), { times: 3 }),
+//           onFalse: () => Effect.void
+//         }),
+//         Effect.forever
+//       )
+//       .pipe(Effect.forkScoped);
+//   })
+// ).pipe(Layer.provide(NatsService.live));
 
-const q = Effect.zip(DatabaseConnection, DatabaseSession)
+const q = Effect.all([DatabaseConnection, DatabaseSession, EventStore])
   .pipe(Effect.andThen((deps) => makeTransactionalBoundary2(...deps, ProjectTransactionalBoundary)))
   .pipe(Layer.unwrapEffect);
 
-const TransactionalBoundaryLive = Layer.effect(
-  ProjectTransactionalBoundary,
-  Effect.all([DatabaseConnection, DatabaseSession, TransactionEvents]).pipe(
-    Effect.andThen((deps) => makeTransactionalBoundary(...deps))
-  )
-).pipe(Layer.provide(EventPublishingDaemon), Layer.provide(TransactionEvents.live));
+// const TransactionalBoundaryLive = Layer.effect(
+//   ProjectTransactionalBoundary,
+//   Effect.all([DatabaseConnection, DatabaseSession, TransactionEvents]).pipe(
+//     Effect.andThen((deps) => makeTransactionalBoundary(...deps))
+//   )
+// ).pipe(Layer.provide(EventPublishingDaemon), Layer.provide(TransactionEvents.live));
 
 const InfrastructureLive = q.pipe(
   Layer.provideMerge(EventStore.live),

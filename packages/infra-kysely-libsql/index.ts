@@ -24,6 +24,7 @@ import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
 import { Client, InValue, LibsqlError } from '@libsql/client';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { nanoid } from 'nanoid';
+import { EventStoreService } from './messaging.js';
 
 export { LibsqlDialect };
 
@@ -90,6 +91,7 @@ class RollbackError extends Data.TaggedError('RollbackError') {
 export const makeTransactionalBoundary2 = <DB, S>(
   connection: DatabaseConnection<DB>,
   session: DatabaseSession<DB, LibsqlError>,
+  eventStore: EventStoreService,
   tag: Context.Tag<S, TransactionalBoundary>
 ) => {
   const { client, db } = connection;
@@ -105,6 +107,17 @@ export const makeTransactionalBoundary2 = <DB, S>(
     );
   }
 
+  const publishingPipeline = eventStore
+    .getUnpublished()
+    .pipe(
+      Effect.andThen((events) =>
+        Effect.zip(
+          Effect.log('publishing events'),
+          eventStore.markPublished(events.map((e) => e.id))
+        )
+      )
+    );
+
   const EventPublishingDaemon = Layer.scopedDiscard(
     Effect.gen(function* () {
       const pub = yield* TransactionEvents;
@@ -113,7 +126,7 @@ export const makeTransactionalBoundary2 = <DB, S>(
         .pipe(
           Effect.map((a) => a === 'commit'),
           Effect.if({
-            onTrue: () => Effect.log('supppp!'),
+            onTrue: () => publishingPipeline,
             onFalse: () => Effect.void
           }),
           Effect.forever

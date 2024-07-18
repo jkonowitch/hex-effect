@@ -1,6 +1,7 @@
+import { Schema } from '@effect/schema';
 import { LibsqlError } from '@libsql/client';
 import { Config, Effect } from 'effect';
-import type { JetStreamClient } from 'nats';
+import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 
 type Events = {
   id: string;
@@ -13,6 +14,23 @@ export type EventStoreService = {
   getUnpublished: () => Effect.Effect<Events, LibsqlError>;
   markPublished: (ids: string[]) => Effect.Effect<void, LibsqlError>;
   save: (event: { occurredOn: string; messageId: string }) => Effect.Effect<void, LibsqlError>;
+};
+
+export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
+  ApplicationNamespace: Schema.String,
+  BoundedContext: Schema.String,
+  EventTag: Schema.String
+}) {
+  get asSubject(): string {
+    return `${this.ApplicationNamespace}.${this.BoundedContext}.${this.EventTag}`;
+  }
+}
+
+export type NatsService = {
+  jetstream: JetStreamClient;
+  jetstreamManager: JetStreamManager;
+  streamInfo: StreamInfo;
+  eventToSubject: (event: Events[number]) => NatsSubject;
 };
 
 const publishEvents = (events: Events, jetstream: JetStreamClient) =>
