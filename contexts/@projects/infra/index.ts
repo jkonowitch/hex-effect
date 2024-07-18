@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { Effect, Fiber, Layer, ManagedRuntime } from 'effect';
 import { TaskId } from '@projects/domain';
 import {
   router,
@@ -47,13 +47,14 @@ const program = Effect.zip(
   { concurrent: true }
 );
 
-const r = registerEvents.pipe(Effect.provide(DomainServiceLive), runtime.runFork);
+const eventDaemon = registerEvents.pipe(Effect.provide(DomainServiceLive), runtime.runFork);
 await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
+// await program.pipe(Effect.provide(DomainServiceLive), runtime.runPromise);
 
 asyncExitHook(
   async () => {
-    await runtime.runPromise(r.interruptAsFork(r.id()));
+    await runtime.runPromise(eventDaemon.pipe(Fiber.interruptFork));
     await runtime.dispose();
   },
-  { wait: 500 }
+  { wait: 1000 }
 );
