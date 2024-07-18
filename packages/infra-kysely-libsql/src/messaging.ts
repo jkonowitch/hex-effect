@@ -1,7 +1,7 @@
 import { Schema } from '@effect/schema';
 import { EventHandlerService } from '@hex-effect/core';
 import { LibsqlError } from '@libsql/client';
-import { Context, Data, Effect, Layer, Stream } from 'effect';
+import { Context, Data, Effect, Either, Layer, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
 import type {
@@ -81,24 +81,28 @@ export const makeEventHandlerService = <Tag>(
   natsService: NatsService,
   tag: Context.Tag<Tag, EventHandlerService>
 ) => {
-  const s: EventHandlerService = {
+  const live: EventHandlerService = {
     register(eventSchema, triggers, handler, config) {
       return Effect.gen(function* () {
         const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
-        yield* kralf(consumerInfo, natsService);
+        yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
+          Effect.gen(function* () {
+            const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
+            yield* handler(decoded);
+          })
+        );
       });
-      // return upsertConsumer(natsService, config.$durableName, triggers).pipe(Effect.ignore);
     }
   };
 
-  return Layer.succeed(tag, s);
+  return Layer.succeed(tag, live);
 };
 
-// upsert consumer
-// create a stream from the async iterable
-// which hits the handler
-
-const kralf = (consumerInfo: ConsumerInfo, natsService: NatsService) =>
+const streamEventsToHandler = <A, E, R>(
+  consumerInfo: ConsumerInfo,
+  natsService: NatsService,
+  handler: (payload: string) => Effect.Effect<A, E, R>
+) =>
   Effect.gen(function* () {
     const consumer = yield* callNats(
       natsService.jetstream.consumers.get(natsService.streamInfo.config.name, consumerInfo.name)
@@ -115,9 +119,19 @@ const kralf = (consumerInfo: ConsumerInfo, natsService: NatsService) =>
     );
 
     yield* Stream.runForEach(stream, (msg) =>
-      Effect.zip(Effect.log('Yass'), callNats(msg.ackAck()))
+      Effect.gen(function* () {
+        const res = yield* handler(msg.data.toString()).pipe(Effect.either);
+
+        yield* Either.match(res, {
+          onLeft: (e) => {
+            msg.term();
+            return Effect.logError(`Message processing failed with: `, e);
+          },
+          onRight: () => callNats(msg.ackAck())
+        });
+      })
     );
-  }).pipe(Effect.scoped, Effect.orDie);
+  }).pipe(Effect.catchAll(Effect.logError), Effect.scoped);
 
 const upsertConsumer = (
   natsService: NatsService,
