@@ -33,6 +33,8 @@ const InfrastructureLive = TransactionalBoundaryLive.pipe(
   Layer.provide(DatabaseConnection.live)
 );
 
-export const runtime = ManagedRuntime.make(
+export const managedRuntime = ManagedRuntime.make(
   InfrastructureLive.pipe(Layer.provide(Logger.minimumLogLevel(LogLevel.All)))
 );
+
+export { DomainServiceLive };
