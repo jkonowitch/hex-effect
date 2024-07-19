@@ -1,7 +1,9 @@
 <script lang="ts">
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
+	import { enhance } from '$app/forms';
 
 	export let data: PageData;
+	export let form: ActionData;
 </script>
 
 <h1>{data.hello}</h1>
@@ -11,3 +13,14 @@
 		<li>[{task.completed ? 'x' : ' '}]{task.description}</li>
 	{/each}
 </ul>
+
+{form?.kralf}
+
+<form method="POST" use:enhance>
+	<label
+		>Description
+		<!-- svelte-ignore a11y-autofocus -->
+		<input autofocus type="text" name="description" />
+	</label>
+	<button>Save</button>
+</form>
