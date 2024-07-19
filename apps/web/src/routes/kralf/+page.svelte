@@ -14,7 +14,12 @@
 	{/each}
 </ul>
 
-{form?.kralf}
+{#if form?.kralf}
+	{#each form.kralf as issue}
+		<p>{issue.path}</p>
+		<p>{issue.message}</p>
+	{/each}
+{/if}
 
 <form method="POST" use:enhance>
 	<label

@@ -4,7 +4,7 @@ import { ProjectId } from '@projects/domain';
 import { error, fail } from '@sveltejs/kit';
 import { run, undecodedHandler } from '$lib/server';
 import { Cause, Exit, Either } from 'effect';
-import { Schema } from '@effect/schema';
+import { Schema, ArrayFormatter } from '@effect/schema';
 
 export const load = (async () => {
 	const res = await undecodedHandler(
@@ -20,14 +20,17 @@ export const load = (async () => {
 export const actions = {
 	default: async (event) => {
 		const data = await event.request.formData();
-		const command = Schema.decodeUnknownEither(AddTask)({
-			description: data.get('description')?.toString(),
-			projectId: '1oYFtjjN2eZDQ6RnbUsQ1',
-			_tag: 'AddTask'
-		});
+		const command = Schema.decodeUnknownEither(AddTask)(
+			{
+				description: data.get('description')?.toString(),
+				projectId: '1oYFtjjN2eZDQ6RnbUsQ1'
+				// _tag: 'AddTask'
+			},
+			{ onExcessProperty: 'error', errors: 'all' }
+		);
 
 		return Either.match(command, {
-			onLeft: (e) => fail(400, { kralf: e.message }),
+			onLeft: (e) => fail(400, { kralf: ArrayFormatter.formatErrorSync(e) }),
 			onRight: async (a) => {
 				await undecodedHandler(a).pipe(run);
 
