@@ -1,20 +1,18 @@
-import { client } from '$lib/server/client';
-import { GetProjectWithTasks, ProjectWithTasks } from '@projects/application';
+import { GetProjectWithTasks } from '@projects/application';
 import type { PageServerLoad } from './$types';
 import { ProjectId } from '@projects/domain';
-import { Effect } from 'effect';
 import { error } from '@sveltejs/kit';
-import { Schema } from '@effect/schema';
+import { undecodedHandler } from '$lib/server';
+import { managedRuntime } from '@projects/infra';
 
 export const load = (async () => {
-	// const data = await fetch('/api/rpc', { method: 'POST' });
-	const data = await client(
+	const res = await undecodedHandler(
 		new GetProjectWithTasks({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
-	).pipe(Effect.runPromiseExit);
+	).pipe(managedRuntime.runPromiseExit);
 
-	if (data._tag === 'Success') {
-		return { hello: 'hello world', data: Schema.encodeSync(ProjectWithTasks)(data.value) };
+	if (res._tag === 'Success') {
+		return { hello: 'hello world', data: res.value };
 	} else {
-		return error(404, data.cause._tag === 'Fail' ? data.cause.error.message : data.cause._tag);
+		return error(404, res.cause._tag === 'Fail' ? res.cause.error.toString() : res.cause._tag);
 	}
 }) satisfies PageServerLoad;

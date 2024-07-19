@@ -1,8 +1,6 @@
-import { toHandler } from '$lib/server';
+import { webHandler } from '$lib/server';
 import type { RequestHandler } from './$types';
 
-const handler = await toHandler();
-
 export const POST: RequestHandler = ({ request }) => {
-	return handler(request);
+	return webHandler(request);
 };
