@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { Effect, Scope } from 'effect';
+import { Effect } from 'effect';
 import { nanoid } from 'nanoid';
 
 export const EventBase = Schema.Struct({
@@ -16,14 +16,28 @@ export const EventBase = Schema.Struct({
 
 type EventBaseWithTag = typeof EventBase.Type & { _tag: string };
 
-export type DomainEventPublisher = {
-  publish(event: EventBaseWithTag): Effect.Effect<void>;
+export type DomainEventPublisher<EventType extends EventBaseWithTag> = {
+  publish(event: EventType): Effect.Effect<void>;
 };
-//write-consistent, write-lazy, read-lazy, read-consistent
-export type TransactionalBoundary = {
-  begin(
-    mode: 'write-consistent' | 'write-lazy' | 'read-lazy' | 'read-consistent'
-  ): Effect.Effect<void, never, Scope.Scope>;
-  commit(): Effect.Effect<void, never, Scope.Scope>;
-  rollback(): Effect.Effect<void>;
+
+export type EventHandlerService = {
+  register<Q extends EventBaseWithTag, I, R extends never, Err, Req>(
+    eventSchema: Schema.Schema<Q, I, R>,
+    triggers: {
+      context: Schema.Schema<Q, I, R>['Type']['_context'];
+      tag: Schema.Schema<Q, I, R>['Type']['_tag'];
+    }[],
+    handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
+    config: { $durableName: string }
+  ): Effect.Effect<void, never, Req>;
 };
+
+// function registerEventHandler<Q extends EventBaseWithTag, I, R extends never>(
+//   eventSchema: Schema.Schema<Q, I, R>,
+//   eventNames: `${Schema.Schema<Q, I, R>['Type']['_context']}/${Schema.Schema<Q, I, R>['Type']['_tag']}`[],
+//   handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void>,
+//   config: { $durableName: string }
+// ) {
+//   const r = Schema.decodeUnknownSync(eventSchema)('asdasd');
+//   handler(r);
+// }

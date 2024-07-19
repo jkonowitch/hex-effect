@@ -22,8 +22,10 @@
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
     "effect": "^3.4.8",
+    "exit-hook": "^4.0.0",
     "kysely": "^0.27.4",
-    "nanoid": "^5.0.7"
+    "nanoid": "^5.0.7",
+    "nats": "^2.28.0"
   },
   "type": "module"
 }

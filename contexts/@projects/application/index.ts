@@ -1,16 +1,21 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import type { Modes, TransactionalBoundary } from '@hex-effect/infra-kysely-libsql';
+import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
+import type {
+  Modes,
+  TransactionalBoundary as ITransactionalBoundary
+} from '@hex-effect/infra-kysely-libsql';
 import {
   Project,
-  ProjectDomainEvents,
+  TaskCompletedEvent,
   ProjectId,
   ProjectRepository,
   Task,
   TaskId,
-  TaskRepository
+  TaskRepository,
+  ProjectDomainEvents
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Scope, Match, Context } from 'effect';
+import { Effect, type Request, Option, pipe, Scope, Context, Match, Fiber } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -56,20 +61,13 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
   }
 ) {}
 
-export class ProcessEvent extends Schema.TaggedRequest<ProcessEvent>()(
-  'ProcessEvent',
-  ApplicationError,
-  Schema.Void,
-  { event: ProjectDomainEvents }
-) {}
-
 /**
  * Application Services
  */
 
-export class ProjectTransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
-  ProjectTransactionalBoundary,
-  TransactionalBoundary
+export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
+  TransactionalBoundary,
+  ITransactionalBoundary
 >() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
@@ -103,7 +101,6 @@ const completeTask = ({ taskId }: CompleteTask) =>
       succeedOrNotFound(`No task ${taskId}`),
       Effect.flatMap(Task.complete)
     );
-    yield* Effect.log('modified task', task);
     yield* repo.save(task);
   }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
 
@@ -117,24 +114,60 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
-const processEvent = ({ event }: ProcessEvent) =>
-  Match.value(event)
+export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
+  EventHandlerService,
+  IEventHandlerService
+>() {}
+
+const sendEmailAfterTaskCompleted = (e: (typeof TaskCompletedEvent)['Type']) =>
+  Effect.serviceFunctions(TaskRepository)
+    .findById(e.taskId)
     .pipe(
-      Match.tag('ProjectCreatedEvent', (e) =>
-        Effect.log(`Emailing user that they have created a new project with id: ${e.projectId}`)
+      succeedOrNotFound(),
+      Effect.andThen((task) => Effect.log(`Emailing regarding task: ${task.description}`))
+    );
+
+const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
+  Match.value(e).pipe(
+    Match.tag('ProjectCreatedEvent', () => Effect.log('Project Created Event')),
+    Match.tag('TaskCompletedEvent', () => Effect.log('Task Completed Event')),
+    Match.exhaustive
+  );
+
+export const registerEvents = Effect.gen(function* () {
+  const { register } = yield* EventHandlerService;
+
+  yield* Effect.all(
+    [
+      register(
+        TaskCompletedEvent,
+        [{ context: '@projects', tag: 'TaskCompletedEvent' }],
+        sendEmailAfterTaskCompleted,
+        {
+          $durableName: 'send-email-after-task-completed'
+        }
       ),
-      Match.tag('TaskCompletedEvent', () => Effect.void),
-      Match.exhaustive
-    )
-    // don't actually need this, but in general these event handlers will execute domain behavior
-    .pipe(withTransactionalBoundary()) satisfies RequestHandler<ProcessEvent>;
+      register(
+        ProjectDomainEvents,
+        [
+          { context: '@projects', tag: 'ProjectCreatedEvent' },
+          { context: '@projects', tag: 'TaskCompletedEvent' }
+        ],
+        someCompositeEventHandler,
+        {
+          $durableName: 'some-composite-event-handler'
+        }
+      )
+    ],
+    { concurrency: 'unbounded' }
+  );
+});
 
 export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
-  Rpc.effect(GetProjectWithTasks, projectWithTasks),
-  Rpc.effect(ProcessEvent, processEvent)
+  Rpc.effect(GetProjectWithTasks, projectWithTasks)
 );
 
 /**
@@ -156,12 +189,17 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
 function withTransactionalBoundary(mode: Modes = 'Batched') {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, ProjectTransactionalBoundary | Exclude<R, Scope.Scope>> =>
+  ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
-      const tx = yield* ProjectTransactionalBoundary;
-      yield* tx.begin(mode);
-      const result = yield* eff.pipe(Effect.tapError(tx.rollback));
-      yield* tx.commit();
-      return result;
-    }).pipe(Effect.scoped);
+      const fiber = yield* Effect.gen(function* () {
+        const tx = yield* TransactionalBoundary;
+        yield* tx.begin(mode);
+        const result = yield* eff.pipe(Effect.tapError(tx.rollback));
+        yield* tx.commit();
+        return result;
+      }).pipe(Effect.scoped, Effect.fork);
+
+      const exit = yield* Fiber.await(fiber);
+      return yield* exit;
+    });
 }

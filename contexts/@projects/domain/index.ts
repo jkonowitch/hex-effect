@@ -15,13 +15,13 @@ export class Project extends Schema.TaggedClass<Project>()('Project', {
 }) {
   public static create(
     title: string
-  ): Effect.Effect<Project, never, ProjectRepository | ProjectDomainPublisher> {
+  ): Effect.Effect<Project, never, ProjectRepository | DomainPublisher> {
     return Effect.gen(function* () {
       const project = new Project({
         id: yield* Effect.serviceFunctions(ProjectRepository).nextId(),
         title
       });
-      yield* Effect.serviceFunctions(ProjectDomainPublisher).publish(
+      yield* Effect.serviceFunctions(DomainPublisher).publish(
         ProjectCreatedEvent.make({ projectId: project.id })
       );
       return project;
@@ -55,10 +55,10 @@ export class Task extends Schema.TaggedClass<Task>()('Task', {
     });
   }
 
-  public static complete(self: Task): Effect.Effect<Task, never, ProjectDomainPublisher> {
+  public static complete(self: Task): Effect.Effect<Task, never, DomainPublisher> {
     return Effect.gen(function* () {
       const task = new Task({ ...self, completed: true });
-      yield* Effect.serviceFunctions(ProjectDomainPublisher).publish(
+      yield* Effect.serviceFunctions(DomainPublisher).publish(
         TaskCompletedEvent.make({ taskId: task.id })
       );
       return task;
@@ -109,7 +109,7 @@ export class TaskRepository extends Context.Tag('TaskRepository')<
 
 export const ProjectDomainEvents = Schema.Union(ProjectCreatedEvent, TaskCompletedEvent);
 
-export class ProjectDomainPublisher extends Context.Tag('ProjectDomainPublisher')<
-  ProjectDomainPublisher,
-  DomainEventPublisher
+export class DomainPublisher extends Context.Tag('ProjectDomainPublisher')<
+  DomainPublisher,
+  DomainEventPublisher<(typeof ProjectDomainEvents)['Type']>
 >() {}
