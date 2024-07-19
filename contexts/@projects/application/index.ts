@@ -49,13 +49,15 @@ export class CompleteTask extends Schema.TaggedRequest<CompleteTask>()(
   }
 ) {}
 
+export const ProjectWithTasks = Schema.Struct({
+  project: Project,
+  tasks: Schema.Array(Task)
+});
+
 export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTasks>()(
   'GetProjectWithTasks',
   ApplicationError,
-  Schema.Struct({
-    project: Project,
-    tasks: Schema.Array(Task)
-  }),
+  ProjectWithTasks,
   {
     projectId: ProjectId
   }
