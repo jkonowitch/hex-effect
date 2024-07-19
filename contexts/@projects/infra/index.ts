@@ -36,6 +36,7 @@ const InfrastructureLive = TransactionalBoundaryLive.pipe(
 export const managedRuntime = ManagedRuntime.make(
   DomainServiceLive.pipe(
     Layer.provideMerge(InfrastructureLive),
-    Layer.provide(Logger.minimumLogLevel(LogLevel.All))
+    Layer.provide(Logger.minimumLogLevel(LogLevel.All)),
+    Layer.orDie
   )
 );

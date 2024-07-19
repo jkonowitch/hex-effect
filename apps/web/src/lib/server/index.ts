@@ -3,10 +3,14 @@ import { HttpRouter as RpcRouter } from '@effect/rpc-http';
 import { Router } from '@effect/rpc';
 import { router } from '@projects/application';
 import { managedRuntime } from '@projects/infra';
-import { Effect } from 'effect';
+import { Effect, ManagedRuntime } from 'effect';
 import { asyncExitHook } from 'exit-hook';
 
 export const undecodedHandler = Router.toHandlerUndecoded(router);
+
+export const run = <A, E, R extends ManagedRuntime.ManagedRuntime.Context<typeof managedRuntime>>(
+	eff: Effect.Effect<A, E, R>
+) => managedRuntime.runPromiseExit(eff);
 
 const runtime = await managedRuntime.runtime();
 
