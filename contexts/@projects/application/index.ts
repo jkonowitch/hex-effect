@@ -170,6 +170,8 @@ export const router = Router.make(
   Rpc.effect(GetProjectWithTasks, projectWithTasks)
 );
 
+export type AppRouter = typeof router;
+
 /**
  * Utils
  */
