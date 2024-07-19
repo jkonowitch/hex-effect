@@ -7,8 +7,5 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*"
   },
-  "dependencies": {
-    "@effect/schema": "^0.68.18",
-    "effect": "^3.4.8"
-  }
+  "dependencies": {}
 }
