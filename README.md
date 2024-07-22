@@ -29,10 +29,22 @@ All of this is made easy by the incredibly powerful `Effect` library. The centra
 - Software is organized into multiple `bounded context`s.
 - Each `bounded context` is implemented as three concentric "layers": `domain`, `application` and `infrastructure`.
   - `domain`: expresses the ubiquitous language of your context through its data types and functions (aggregates, entities, repositories, domain events, e.g.).
-  - `application`: organizes the domain into named "use cases" and calls domain functions to fulfill the use case.
-  - `infrastructure`
+  - `application`: organizes the domain into named "use cases" and calls domain functions to fulfill these use cases.
+  - `infrastructure`: implements incoming adapters (HTTP, message broker consumption, e.g.) as well as outgoing adapters (databases, external APIS, e.g.).
+- `bounded context`s communicate asynchronously and in a decoupled manner via domain events, or via RPC if synchronous communication is needed
+
+## Getting Started
+
+- Review the project management context [`contexts/@projects](./contexts/@projects/) to see how it implements `domain`, `application` and `infrastructure` layers.
+  - Note the use of `@hex-effect/infra-kysely-libsql-nats` package in the infrastructure layer. This is a reusable library that implements and structures important features such as the Transactional Boundary, and a durable event consumer.
+- Review how bounded contexts are integrated into a UI in [`apps/web`](./apps/web/)
+- Implement your own app! You can reuse the `infra-kysely-libsql-nats` adapter, or write your own.
 
 ## To Do
+
+- [ ] Demonstration of how authentication/authorization would be integrated via an abstract `RequestContext` service
+- [ ] Improve documentation
+- [ ] Add a `@hex-effect/infra-postgres` adapter. I suspect an entire infra could be implemented with postgres, including a durable event queue.
 
 ## Reference
 
@@ -44,15 +56,3 @@ This project was developed with heavy inspiration and reference to the following
   - This is the book that describes DDD for the first time, and defined its foundational principles/approach.
 - <u>[Get Your Hands Dirty on Clean Architecture](https://www.amazon.com/Hands-Dirty-Clean-Architecture-hands/dp/1839211962)</u> by Tom Hombergs
   - While this implementation differs significantly from what Hombergs describes, it nonetheless was a helpful aid to understanding how a "hexagonal" or "ports and adapters" architecture works.
-
-### Outline
-
-- Motivation
-  - Domain Driven Design
-  - Hexagonal architecture
-- Architecture
-  - Domain
-  - Application
-  - Infrastructure
-  - Events
-- Packages that are available
