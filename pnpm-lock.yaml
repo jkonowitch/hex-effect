@@ -51,6 +51,9 @@ importers:
       '@projects/application':
         specifier: workspace:*
         version: link:../../contexts/@projects/application
+      '@projects/domain':
+        specifier: workspace:*
+        version: link:../../contexts/@projects/domain
       '@projects/infra':
         specifier: workspace:*
         version: link:../../contexts/@projects/infra

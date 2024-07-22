@@ -16,6 +16,7 @@
   "dependencies": {
     "@projects/application": "workspace:*",
     "@projects/infra": "workspace:*",
+    "@projects/domain": "workspace:*",
     "@repo/ui": "workspace:*"
   },
   "devDependencies": {
