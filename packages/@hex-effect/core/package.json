@@ -2,7 +2,7 @@
   "name": "@hex-effect/core",
   "version": "0.0.1",
   "scripts": {
-    "build": "tsup --format esm index.ts --dts"
+    "build": "rm -rf dist && bun build ./index.ts --outdir ./dist --target bun --external '*' && tsc --emitDeclarationOnly --outDir ./dist"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -15,5 +15,11 @@
   "peerDependencies": {
     "@effect/schema": ">=0.68",
     "effect": ">=3.4"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }
