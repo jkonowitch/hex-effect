@@ -39,7 +39,7 @@ _source: [Wata Factory](https://wata.es/hexagonal-architecture-introduction-and-
 
 ## Getting Started
 
-- Review the project management context [`contexts/@projects](./contexts/@projects/) to see how it implements `domain`, `application` and `infrastructure` layers.
+- Review the project management context [`contexts/@projects`](./contexts/@projects/) to see how it implements `domain`, `application` and `infrastructure` layers.
   - Note the use of `@hex-effect/infra-kysely-libsql-nats` package in the infrastructure layer. This is a reusable library that implements and structures important features such as the Transactional Boundary, and a durable event consumer.
 - Review how bounded contexts are integrated into a UI in [`apps/web`](./apps/web/)
 - Implement your own app! You can reuse the `infra-kysely-libsql-nats` adapter, or write your own.
