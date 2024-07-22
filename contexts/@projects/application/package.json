@@ -10,7 +10,7 @@
   "dependencies": {
     "@projects/domain": "workspace:*",
     "@hex-effect/core": "workspace:*",
-    "@hex-effect/infra-kysely-libsql": "workspace:*"
+    "@hex-effect/infra-kysely-libsql-nats": "workspace:*"
   },
   "type": "module"
 }

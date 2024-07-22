@@ -7,9 +7,9 @@ import {
   LibsqlDialect,
   NatsSubject,
   type DatabaseConnection as DatabaseConnectionService,
-  type NatsService as INatsService
-} from '@hex-effect/infra-kysely-libsql';
-import type { DatabaseSession as DatabaseSessionService } from '@hex-effect/infra';
+  type NatsService as INatsService,
+  type DatabaseSession as DatabaseSessionService
+} from '@hex-effect/infra-kysely-libsql-nats';
 import { connect, RetentionPolicy } from 'nats';
 
 export class DatabaseConnection extends Context.Tag('ProjectDatabaseConnection')<

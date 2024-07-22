@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { DomainEventPublisher, EventBase } from '@hex-effect/core';
+import { DomainEventPublisher, EventBaseSchema } from '@hex-effect/core';
 import { Context, Effect } from 'effect';
 import type { Option } from 'effect/Option';
 
@@ -67,7 +67,7 @@ export class Task extends Schema.TaggedClass<Task>()('Task', {
 }
 
 const ProjectEventBase = Schema.Struct({
-  ...EventBase.fields,
+  ...EventBaseSchema.fields,
   _context: Schema.Literal('@projects').pipe(
     Schema.propertySignature,
     Schema.withConstructorDefault(() => '@projects' as const)

@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
+// Adapted from https://github.com/libsql/kysely-libsql
+// Needed more specific control over transaction behavior
+
 import {
   type Client,
   type Config,

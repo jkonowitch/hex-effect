@@ -10,7 +10,6 @@ import {
 import {
   Effect,
   FiberRef,
-  Scope,
   Data,
   Match,
   PubSub,
@@ -21,88 +20,37 @@ import {
   Queue,
   Equal
 } from 'effect';
-import { ReadonlyQuery, type DatabaseSession } from '@hex-effect/infra';
-import { Client, InValue, LibsqlError } from '@libsql/client';
+import type { TransactionalBoundary } from '@hex-effect/core';
+import { InValue, LibsqlError } from '@libsql/client';
 import { nanoid } from 'nanoid';
-import { EventStoreService, makePublishingPipeline, NatsService } from './messaging.js';
+import { makePublishingPipeline } from './messaging.js';
+import type {
+  DatabaseConnection,
+  DatabaseSession,
+  EventStoreService,
+  NatsService,
+  ReadonlyQuery
+} from './service-definitions.js';
 
-export type Modes = Exclude<TransactionSession['_tag'], 'None'>;
-
-export type TransactionalBoundary = {
-  begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
-  commit(): Effect.Effect<void, never>;
-  rollback(): Effect.Effect<void>;
-};
-
-export type DatabaseConnection<DB> = {
-  db: Kysely<DB>;
-  client: Client;
-};
-
-type DBTX = {
-  commit: Effect.Effect<void>;
-  rollback: Effect.Effect<void>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tx: Transaction<any>;
-};
-
-type TransactionSession = Data.TaggedEnum<{
-  Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
-  Serialized: { tx: DBTX };
-}>;
-
-const { Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
-
-const initiateTransaction = <DB>(db: Kysely<DB>) =>
-  Effect.async<DBTX>((resume) => {
-    const txSuspend = Promise.withResolvers();
-
-    const operation = db
-      .transaction()
-      .setIsolationLevel('serializable')
-      .execute(async function (tx) {
-        const rollback = Effect.zipRight(
-          Effect.sync(() => txSuspend.reject(new RollbackError())),
-          Effect.tryPromise({
-            try: () => operation,
-            catch: (e) => (RollbackError.isRollback(e) ? e : new Error(`${e}`))
-          })
-        ).pipe(Effect.catchTag('RollbackError', Effect.ignore), Effect.orDie);
-
-        const commit = Effect.zipRight(
-          Effect.sync(() => txSuspend.resolve()),
-          Effect.promise(() => operation)
-        );
-
-        resume(Effect.succeed({ rollback, commit, tx }));
-
-        await txSuspend.promise;
-      });
-  });
-
-class RollbackError extends Data.TaggedError('RollbackError') {
-  static isRollback(e: unknown): e is RollbackError {
-    return e instanceof this && e._tag === 'RollbackError';
-  }
-}
+type LibsqlTransactionalBoundary = TransactionalBoundary<Modes>;
 
 export const makeTransactionalBoundary = <DB, S>(
   connection: DatabaseConnection<DB>,
   session: DatabaseSession<DB, LibsqlError>,
   eventStore: EventStoreService,
   natsService: NatsService,
-  tag: Context.Tag<S, TransactionalBoundary>
+  tag: Context.Tag<S, LibsqlTransactionalBoundary>
 ) => {
   const { client, db } = connection;
   let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
 
   class TransactionEvents extends Context.Tag(nanoid())<
     TransactionEvents,
-    PubSub.PubSub<keyof TransactionalBoundary>
+    PubSub.PubSub<keyof LibsqlTransactionalBoundary>
   >() {
     public static live = Layer.effect(
       TransactionEvents,
-      PubSub.sliding<keyof TransactionalBoundary>(10)
+      PubSub.sliding<keyof LibsqlTransactionalBoundary>(10)
     );
   }
 
@@ -127,7 +75,7 @@ export const makeTransactionalBoundary = <DB, S>(
 
   const boundaryEffect = TransactionEvents.pipe(
     Effect.map(
-      (pub): TransactionalBoundary => ({
+      (pub): LibsqlTransactionalBoundary => ({
         begin: (mode) =>
           Match.value(mode)
             .pipe(
@@ -190,15 +138,6 @@ export const makeTransactionalBoundary = <DB, S>(
   return layer;
 };
 
-const coldInstance = new Kysely<unknown>({
-  dialect: {
-    createAdapter: () => new SqliteAdapter(),
-    createDriver: () => new DummyDriver(),
-    createIntrospector: (db) => new SqliteIntrospector(db),
-    createQueryCompiler: () => new SqliteQueryCompiler()
-  }
-});
-
 type FiberRefValue<T> = T extends FiberRef.FiberRef<infer V> ? V : never;
 
 export const createDatabaseSession = <DB>(
@@ -214,6 +153,64 @@ export const createDatabaseSession = <DB>(
     queryBuilder: coldInstance as Kysely<DB>
   };
 };
+
+const coldInstance = new Kysely<unknown>({
+  dialect: {
+    createAdapter: () => new SqliteAdapter(),
+    createDriver: () => new DummyDriver(),
+    createIntrospector: (db) => new SqliteIntrospector(db),
+    createQueryCompiler: () => new SqliteQueryCompiler()
+  }
+});
+
+export type Modes = Exclude<TransactionSession['_tag'], 'None'>;
+
+type DBTX = {
+  commit: Effect.Effect<void>;
+  rollback: Effect.Effect<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: Transaction<any>;
+};
+
+type TransactionSession = Data.TaggedEnum<{
+  Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
+  Serialized: { tx: DBTX };
+}>;
+
+const { Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
+
+const initiateTransaction = <DB>(db: Kysely<DB>) =>
+  Effect.async<DBTX>((resume) => {
+    const txSuspend = Promise.withResolvers();
+
+    const operation = db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async function (tx) {
+        const rollback = Effect.zipRight(
+          Effect.sync(() => txSuspend.reject(new RollbackError())),
+          Effect.tryPromise({
+            try: () => operation,
+            catch: (e) => (RollbackError.isRollback(e) ? e : new Error(`${e}`))
+          })
+        ).pipe(Effect.catchTag('RollbackError', Effect.ignore), Effect.orDie);
+
+        const commit = Effect.zipRight(
+          Effect.sync(() => txSuspend.resolve()),
+          Effect.promise(() => operation)
+        );
+
+        resume(Effect.succeed({ rollback, commit, tx }));
+
+        await txSuspend.promise;
+      });
+  });
+
+class RollbackError extends Data.TaggedError('RollbackError') {
+  static isRollback(e: unknown): e is RollbackError {
+    return e instanceof this && e._tag === 'RollbackError';
+  }
+}
 
 const createBatchedDatabaseSession = <DB>(
   hotInstance: Kysely<DB>,

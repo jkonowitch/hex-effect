@@ -3,7 +3,7 @@ import { TransactionalBoundary, registerEvents, EventHandlerService } from '@pro
 import {
   makeEventHandlerService,
   makeTransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql';
+} from '@hex-effect/infra-kysely-libsql-nats';
 import { DatabaseConnection, DatabaseSession, NatsService } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
 

@@ -4,7 +4,7 @@ import type { EventHandlerService as IEventHandlerService } from '@hex-effect/co
 import type {
   Modes,
   TransactionalBoundary as ITransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql';
+} from '@hex-effect/infra-kysely-libsql-nats';
 import {
   Project,
   TaskCompletedEvent,
