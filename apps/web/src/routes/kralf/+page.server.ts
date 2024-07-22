@@ -23,8 +23,8 @@ export const actions = {
 		const command = Schema.decodeUnknownEither(AddTask)(
 			{
 				description: data.get('description')?.toString(),
-				projectId: '1oYFtjjN2eZDQ6RnbUsQ1'
-				// _tag: 'AddTask'
+				projectId: '1oYFtjjN2eZDQ6RnbUsQ1',
+				_tag: 'AddTask'
 			},
 			{ onExcessProperty: 'error', errors: 'all' }
 		);
