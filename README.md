@@ -8,7 +8,7 @@ Written in Typescript, built with [`Effect`](https://effect.website/).
 
 ### Motivation
 
-This project is intended to serve as a guide for Typescript developers wanting to write full stack, domain driven applications with a "clean" architecture. Hopefully this makes it a little bit "easier" to get started.
+This project is intended to serve as a guide for Typescript developers wanting to write full stack, domain driven applications with a "clean" architecture. Hopefully this makes it a little bit easier to get started.
 
 ### Key Features
 
