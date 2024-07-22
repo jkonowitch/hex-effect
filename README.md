@@ -4,6 +4,36 @@ A functional reference implementation of the [Hexagonal Architecture](<https://e
 
 Written in Typescript, built with [`Effect`](https://effect.website/).
 
+## Overview
+
+### Motivation
+
+This project is intended to serve as a guide for Typescript developers wanting to write full stack, domain driven applications with a "clean" architecture. Hopefully this makes it a little bit "easier" to get started.
+
+### Key Features
+
+- Clean separation of domain, application, and infrastructure layers
+- Communication between bounded contexts via domain events, backed by a durable message queue
+- Example application which demonstrates "how to", as well as an example integration with a UI (Sveltekit, in this case)
+
+All of this is made easy by the incredibly powerful `Effect` library. The centrality of `Effect` to making this approach practicable and production-ready deserves its own section. For now, I'll just mention some of the features that `Effect` lends to this project:
+
+- Dependency injection: abstract services are able to be used/passed around in the "inner" domain/application layers without a clue as to their implementation
+- Typesafe serialization / deserialization via `@effect/schema`
+- Applications expose their use cases as `@effect/rpc` routers - which are platform and transport agnostic descriptions of an application interface
+- Side effect management (concurrency control, retries, logging, observability, etc. etc.) in the infrastructure layer
+- And more...
+
+### Brief overview of DDD and Hexagonal Architecture
+
+- Software is organized into multiple `bounded context`s.
+- Each `bounded context` is implemented as three concentric "layers": `domain`, `application` and `infrastructure`.
+  - `domain`: expresses the ubiquitous language of your context through its data types and functions (aggregates, entities, repositories, domain events, e.g.).
+  - `application`: organizes the domain into named "use cases" and calls domain functions to fulfill the use case.
+  - `infrastructure`
+
+## To Do
+
 ## Reference
 
 This project was developed with heavy inspiration and reference to the following books.
