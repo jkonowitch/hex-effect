@@ -42,6 +42,9 @@ importers:
       turbo:
         specifier: ^2.0.9
         version: 2.0.9
+      typescript:
+        specifier: ^5.3.3
+        version: 5.5.3
 
   apps/web:
     dependencies:
@@ -88,9 +91,6 @@ importers:
       tslib:
         specifier: ^2.6.2
         version: 2.6.3
-      typescript:
-        specifier: ^5.3.3
-        version: 5.5.3
       vite:
         specifier: ^5.1.4
         version: 5.3.4(@types/node@20.12.14)

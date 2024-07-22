@@ -17,9 +17,12 @@
     "effect": ">=3.4"
   },
   "exports": {
-    ".": {
+    "node": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "bun": {
+      "default": "./index.ts"
     }
   }
 }

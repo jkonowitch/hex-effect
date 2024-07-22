@@ -1,6 +1,9 @@
 {
   "name": "@hex-effect/infra-kysely-libsql-nats",
   "version": "0.0.1",
+  "scripts": {
+    "build": "rm -rf dist && bun build ./index.ts --outdir ./dist --target bun --external '*' && tsc --emitDeclarationOnly --outDir ./dist"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*"
@@ -11,10 +14,19 @@
     "effect": ">=3.4",
     "kysely": "~0.27.4",
     "@libsql/client": "~0.7.0",
-    "@hex-effect/core": "workspace:*"
+    "@hex-effect/core": "workspace:*",
+    "nats": "^2.28.0"
   },
   "dependencies": {
-    "nanoid": "^5.0.7",
-    "nats": "^2.28.0"
+    "nanoid": "^5.0.7"
+  },
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "bun": {
+      "default": "./index.ts"
+    }
   }
 }
