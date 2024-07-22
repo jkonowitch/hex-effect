@@ -9,20 +9,20 @@ import { asyncExitHook } from 'exit-hook';
 export const undecodedHandler = Router.toHandlerUndecoded(router);
 
 export const run = <A, E, R extends ManagedRuntime.ManagedRuntime.Context<typeof managedRuntime>>(
-	eff: Effect.Effect<A, E, R>
+  eff: Effect.Effect<A, E, R>
 ) => managedRuntime.runPromiseExit(eff);
 
 const runtime = await managedRuntime.runtime();
 
 asyncExitHook(
-	async () => {
-		await managedRuntime.dispose();
-	},
-	{ wait: 500 }
+  async () => {
+    await managedRuntime.dispose();
+  },
+  { wait: 500 }
 );
 
 const app = HttpRouter.empty.pipe(HttpRouter.post('/api/rpc', RpcRouter.toHttpApp(router)));
 
 export const webHandler = HttpApp.toWebHandlerRuntime(runtime)(
-	app.pipe(Effect.tapError(Effect.logError))
+  app.pipe(Effect.tapError(Effect.logError))
 );

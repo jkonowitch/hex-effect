@@ -7,35 +7,35 @@ import { Cause, Exit, Either } from 'effect';
 import { Schema, ArrayFormatter } from '@effect/schema';
 
 export const load = (async () => {
-	const res = await undecodedHandler(
-		new GetProjectWithTasks({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
-	).pipe(run);
+  const res = await undecodedHandler(
+    new GetProjectWithTasks({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
+  ).pipe(run);
 
-	return Exit.match(res, {
-		onSuccess: (data) => ({ data, hello: 'hello world' }),
-		onFailure: (cause) => (Cause.isFailType(cause) ? error(404, cause.error.message) : error(500))
-	});
+  return Exit.match(res, {
+    onSuccess: (data) => ({ data, hello: 'hello world' }),
+    onFailure: (cause) => (Cause.isFailType(cause) ? error(404, cause.error.message) : error(500))
+  });
 }) satisfies PageServerLoad;
 
 export const actions = {
-	default: async (event) => {
-		const data = await event.request.formData();
-		const command = Schema.decodeUnknownEither(AddTask)(
-			{
-				description: data.get('description')?.toString(),
-				projectId: '1oYFtjjN2eZDQ6RnbUsQ1',
-				_tag: 'AddTask'
-			},
-			{ onExcessProperty: 'error', errors: 'all' }
-		);
+  default: async (event) => {
+    const data = await event.request.formData();
+    const command = Schema.decodeUnknownEither(AddTask)(
+      {
+        description: data.get('description')?.toString(),
+        projectId: '1oYFtjjN2eZDQ6RnbUsQ1',
+        _tag: 'AddTask'
+      },
+      { onExcessProperty: 'error', errors: 'all' }
+    );
 
-		return Either.match(command, {
-			onLeft: (e) => fail(400, { kralf: ArrayFormatter.formatErrorSync(e) }),
-			onRight: async (a) => {
-				await undecodedHandler(a).pipe(run);
+    return Either.match(command, {
+      onLeft: (e) => fail(400, { kralf: ArrayFormatter.formatErrorSync(e) }),
+      onRight: async (a) => {
+        await undecodedHandler(a).pipe(run);
 
-				return { success: true };
-			}
-		});
-	}
+        return { success: true };
+      }
+    });
+  }
 } satisfies Actions;
