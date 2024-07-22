@@ -12,7 +12,7 @@ export const load = (async ({ params }) => {
   ).pipe(run);
 
   return Exit.match(res, {
-    onSuccess: (data) => ({ data, hello: 'hello world' }),
+    onSuccess: (data) => ({ data }),
     onFailure: (cause) => (Cause.isFailType(cause) ? error(404, cause.error.message) : error(500))
   });
 }) satisfies PageServerLoad;

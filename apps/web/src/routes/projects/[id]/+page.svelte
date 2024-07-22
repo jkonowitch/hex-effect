@@ -6,8 +6,7 @@
   export let form: ActionData;
 </script>
 
-<h1>{data.hello}</h1>
-<h2>{data.data.project.title}</h2>
+<h1>Project {data.data.project.title}</h1>
 <ul>
   {#each data.data.tasks as task}
     <li>[{task.completed ? 'x' : ' '}]{task.description}</li>
