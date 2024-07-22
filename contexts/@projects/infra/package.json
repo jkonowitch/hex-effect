@@ -14,14 +14,10 @@
     "kysely-ctl": "^0.8.9"
   },
   "dependencies": {
-    "@effect/rpc": "^0.31.21",
-    "@effect/schema": "^0.68.18",
     "@hex-effect/infra-kysely-libsql-nats": "workspace:*",
     "@libsql/client": "~0.7.0",
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
-    "effect": "^3.4.8",
-    "exit-hook": "^4.0.0",
     "kysely": "^0.27.4",
     "nanoid": "^5.0.7",
     "nats": "^2.28.0"

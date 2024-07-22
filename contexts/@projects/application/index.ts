@@ -1,10 +1,8 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
-import type {
-  Modes,
-  TransactionalBoundary as ITransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql-nats';
+import type { Modes } from '@hex-effect/infra-kysely-libsql-nats';
+import type { TransactionalBoundary as ITransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   TaskCompletedEvent,
@@ -49,16 +47,25 @@ export class CompleteTask extends Schema.TaggedRequest<CompleteTask>()(
   }
 ) {}
 
+export const ProjectWithTasks = Schema.Struct({
+  project: Project,
+  tasks: Schema.Array(Task)
+});
+
 export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTasks>()(
   'GetProjectWithTasks',
   ApplicationError,
-  Schema.Struct({
-    project: Project,
-    tasks: Schema.Array(Task)
-  }),
+  ProjectWithTasks,
   {
     projectId: ProjectId
   }
+) {}
+
+export class GetAllProjects extends Schema.TaggedRequest<GetAllProjects>()(
+  'GetAllProjects',
+  ApplicationError,
+  Schema.Array(Project),
+  {}
 ) {}
 
 /**
@@ -67,7 +74,7 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
 
 export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
   TransactionalBoundary,
-  ITransactionalBoundary
+  ITransactionalBoundary<Modes>
 >() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
@@ -113,6 +120,10 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     Effect.map(([project, tasks]) => Option.all({ project, tasks })),
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const getAllProjects = (_: GetAllProjects) =>
+  Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
 export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
   EventHandlerService,
@@ -167,8 +178,11 @@ export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
-  Rpc.effect(GetProjectWithTasks, projectWithTasks)
+  Rpc.effect(GetProjectWithTasks, projectWithTasks),
+  Rpc.effect(GetAllProjects, getAllProjects)
 );
+
+export type AppRouter = typeof router;
 
 /**
  * Utils

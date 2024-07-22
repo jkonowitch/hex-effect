@@ -13,8 +13,6 @@
     "@repo/typescript-config": "workspace:*"
   },
   "dependencies": {
-    "@effect/schema": "^0.68.18",
-    "effect": "^3.4.8",
     "@hex-effect/core": "workspace:*"
   },
   "type": "module"
