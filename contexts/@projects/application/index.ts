@@ -1,10 +1,8 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
-import type {
-  Modes,
-  TransactionalBoundary as ITransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql-nats';
+import type { Modes } from '@hex-effect/infra-kysely-libsql-nats';
+import type { TransactionalBoundary as ITransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   TaskCompletedEvent,
@@ -69,7 +67,7 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
 
 export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
   TransactionalBoundary,
-  ITransactionalBoundary
+  ITransactionalBoundary<Modes>
 >() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
