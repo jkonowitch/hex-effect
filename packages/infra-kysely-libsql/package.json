@@ -1,5 +1,5 @@
 {
-  "name": "@hex-effect/infra-kysely-libsql",
+  "name": "@hex-effect/infra-kysely-libsql-nats",
   "version": "0.0.1",
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -11,8 +11,7 @@
     "effect": ">=3.4",
     "kysely": "~0.27.4",
     "@libsql/client": "~0.7.0",
-    "@hex-effect/core": "workspace:*",
-    "@hex-effect/infra": "workspace:*"
+    "@hex-effect/core": "workspace:*"
   },
   "dependencies": {
     "nanoid": "^5.0.7",

@@ -9,7 +9,7 @@ import {
   type DatabaseConnection as DatabaseConnectionService,
   type NatsService as INatsService,
   type DatabaseSession as DatabaseSessionService
-} from '@hex-effect/infra-kysely-libsql';
+} from '@hex-effect/infra-kysely-libsql-nats';
 import { connect, RetentionPolicy } from 'nats';
 
 export class DatabaseConnection extends Context.Tag('ProjectDatabaseConnection')<

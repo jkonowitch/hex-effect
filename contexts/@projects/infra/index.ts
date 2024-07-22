@@ -11,7 +11,7 @@ import { Router } from '@effect/rpc';
 import {
   makeEventHandlerService,
   makeTransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql';
+} from '@hex-effect/infra-kysely-libsql-nats';
 import { asyncExitHook } from 'exit-hook';
 import { DatabaseConnection, DatabaseSession, NatsService } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';

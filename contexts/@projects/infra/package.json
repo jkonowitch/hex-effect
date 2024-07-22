@@ -16,8 +16,7 @@
   "dependencies": {
     "@effect/rpc": "^0.31.21",
     "@effect/schema": "^0.68.18",
-    "@hex-effect/infra": "workspace:*",
-    "@hex-effect/infra-kysely-libsql": "workspace:*",
+    "@hex-effect/infra-kysely-libsql-nats": "workspace:*",
     "@libsql/client": "~0.7.0",
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
