@@ -50,11 +50,11 @@ importers:
         version: link:../../contexts/@projects/infra
       '@repo/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../packages/@repo/ui
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../../packages/config-eslint
+        version: link:../../packages/@repo/config-eslint
       '@sveltejs/kit':
         specifier: ^2.5.2
         version: 2.5.18(@sveltejs/vite-plugin-svelte@3.1.1(svelte@4.2.18)(vite@5.3.4(@types/node@20.12.14)))(svelte@4.2.18)(vite@5.3.4(@types/node@20.12.14))
@@ -99,48 +99,48 @@ importers:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../../../packages/config-eslint
+        version: link:../../../packages/@repo/config-eslint
       '@repo/typescript-config':
         specifier: workspace:*
-        version: link:../../../packages/typescript-config
+        version: link:../../../packages/@repo/typescript-config
 
   contexts/@projects/application:
     dependencies:
       '@hex-effect/core':
         specifier: workspace:*
-        version: link:../../../packages/core
+        version: link:../../../packages/@hex-effect/core
       '@hex-effect/infra-kysely-libsql-nats':
         specifier: workspace:*
-        version: link:../../../packages/infra-kysely-libsql-nats
+        version: link:../../../packages/@hex-effect/infra-kysely-libsql-nats
       '@projects/domain':
         specifier: workspace:*
         version: link:../domain
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../../../packages/config-eslint
+        version: link:../../../packages/@repo/config-eslint
       '@repo/typescript-config':
         specifier: workspace:*
-        version: link:../../../packages/typescript-config
+        version: link:../../../packages/@repo/typescript-config
 
   contexts/@projects/domain:
     dependencies:
       '@hex-effect/core':
         specifier: workspace:*
-        version: link:../../../packages/core
+        version: link:../../../packages/@hex-effect/core
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../../../packages/config-eslint
+        version: link:../../../packages/@repo/config-eslint
       '@repo/typescript-config':
         specifier: workspace:*
-        version: link:../../../packages/typescript-config
+        version: link:../../../packages/@repo/typescript-config
 
   contexts/@projects/infra:
     dependencies:
       '@hex-effect/infra-kysely-libsql-nats':
         specifier: workspace:*
-        version: link:../../../packages/infra-kysely-libsql-nats
+        version: link:../../../packages/@hex-effect/infra-kysely-libsql-nats
       '@libsql/client':
         specifier: ~0.7.0
         version: 0.7.0
@@ -165,10 +165,10 @@ importers:
         version: 0.4.0(kysely@0.27.4)
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../../../packages/config-eslint
+        version: link:../../../packages/@repo/config-eslint
       '@repo/typescript-config':
         specifier: workspace:*
-        version: link:../../../packages/typescript-config
+        version: link:../../../packages/@repo/typescript-config
       dotenv-cli:
         specifier: ^7.4.2
         version: 7.4.2
@@ -179,22 +179,7 @@ importers:
         specifier: ^0.8.9
         version: 0.8.11(kysely@0.27.4)
 
-  packages/config-eslint:
-    dependencies:
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^7.1.0
-        version: 7.17.0(@typescript-eslint/parser@7.17.0(eslint@8.57.0)(typescript@5.5.3))(eslint@8.57.0)(typescript@5.5.3)
-      '@typescript-eslint/parser':
-        specifier: ^7.1.0
-        version: 7.17.0(eslint@8.57.0)(typescript@5.5.3)
-      eslint-config-prettier:
-        specifier: ^9.1.0
-        version: 9.1.0(eslint@8.57.0)
-      eslint-plugin-svelte:
-        specifier: ^2.35.1
-        version: 2.43.0(eslint@8.57.0)(svelte@4.2.18)
-
-  packages/core:
+  packages/@hex-effect/core:
     dependencies:
       '@effect/schema':
         specifier: '>=0.68'
@@ -208,15 +193,15 @@ importers:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../config-eslint
+        version: link:../../@repo/config-eslint
       '@repo/typescript-config':
         specifier: workspace:*
-        version: link:../typescript-config
+        version: link:../../@repo/typescript-config
       tsup:
         specifier: ^8.1.0
         version: 8.2.2(jiti@1.21.6)(postcss@8.4.39)(tsx@4.16.2)(typescript@5.5.3)
 
-  packages/infra-kysely-libsql-nats:
+  packages/@hex-effect/infra-kysely-libsql-nats:
     dependencies:
       '@effect/schema':
         specifier: '>=0.68'
@@ -242,12 +227,27 @@ importers:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../config-eslint
+        version: link:../../@repo/config-eslint
       '@repo/typescript-config':
         specifier: workspace:*
-        version: link:../typescript-config
+        version: link:../../@repo/typescript-config
 
-  packages/template:
+  packages/@repo/config-eslint:
+    dependencies:
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^7.1.0
+        version: 7.17.0(@typescript-eslint/parser@7.17.0(eslint@8.57.0)(typescript@5.5.3))(eslint@8.57.0)(typescript@5.5.3)
+      '@typescript-eslint/parser':
+        specifier: ^7.1.0
+        version: 7.17.0(eslint@8.57.0)(typescript@5.5.3)
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.0(eslint@8.57.0)
+      eslint-plugin-svelte:
+        specifier: ^2.35.1
+        version: 2.43.0(eslint@8.57.0)(svelte@4.2.18)
+
+  packages/@repo/template:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -256,9 +256,9 @@ importers:
         specifier: workspace:*
         version: link:../typescript-config
 
-  packages/typescript-config: {}
+  packages/@repo/typescript-config: {}
 
-  packages/ui:
+  packages/@repo/ui:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -1598,7 +1598,6 @@ packages:
 
   libsql@0.3.19:
     resolution: {integrity: sha512-Aj5cQ5uk/6fHdmeW0TiXK42FqUlwx7ytmMLPSaUQPin5HKKKuUPD62MAbN4OEweGBBI7q1BekoEN4gPUEL6MZA==}
-    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   lilconfig@2.1.0:
