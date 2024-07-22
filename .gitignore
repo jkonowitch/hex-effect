@@ -15,6 +15,7 @@ coverage
 .DS_Store
 *.pem
 .turbo
+dist
 
 # debug
 npm-debug.log*

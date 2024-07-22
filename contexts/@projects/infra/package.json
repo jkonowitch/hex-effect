@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "generate-types": "kysely-codegen --dialect libsql --out-file persistence/schema.ts"
+    "generate-types": "kysely-codegen --dialect libsql --out-file persistence/schema.ts",
+    "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist"
   },
   "devDependencies": {
     "@libsql/kysely-libsql": "^0.4.0",
@@ -22,5 +23,14 @@
     "nanoid": "^5.0.7",
     "nats": "^2.28.0"
   },
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "default": {
+      "default": "./index.ts"
+    }
+  }
 }

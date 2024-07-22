@@ -15,12 +15,13 @@
   },
   "dependencies": {
     "@projects/application": "workspace:*",
-    "@projects/infra": "workspace:*",
     "@projects/domain": "workspace:*",
+    "@projects/infra": "workspace:*",
     "@repo/ui": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
+    "@rollup/plugin-node-resolve": "^15.2.3",
     "@sveltejs/kit": "^2.5.2",
     "@sveltejs/vite-plugin-svelte": "^3.0.2",
     "@typescript-eslint/eslint-plugin": "^7.1.0",
