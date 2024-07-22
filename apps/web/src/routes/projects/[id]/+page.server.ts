@@ -1,4 +1,4 @@
-import { AddTask, GetProjectWithTasks } from '@projects/application';
+import { AddTask, CompleteTask, GetProjectWithTasks } from '@projects/application';
 import type { PageServerLoad, Actions } from './$types';
 import { ProjectId } from '@projects/domain';
 import { error, fail } from '@sveltejs/kit';
@@ -18,13 +18,32 @@ export const load = (async ({ params }) => {
 }) satisfies PageServerLoad;
 
 export const actions = {
-  default: async ({ request, params }) => {
+  addTask: async ({ request, params }) => {
     const data = await request.formData();
     const command = Schema.decodeUnknownEither(AddTask)(
       {
         description: data.get('description')?.toString(),
         projectId: params.id,
         _tag: 'AddTask'
+      },
+      { onExcessProperty: 'error', errors: 'all' }
+    );
+
+    return Either.match(command, {
+      onLeft: (e) => fail(400, { errors: ArrayFormatter.formatErrorSync(e) }),
+      onRight: async (a) => {
+        await undecodedHandler(a).pipe(run);
+
+        return { success: true };
+      }
+    });
+  },
+  completeTask: async ({ request }) => {
+    const data = await request.formData();
+    const command = Schema.decodeUnknownEither(CompleteTask)(
+      {
+        taskId: data.get('taskId')?.toString(),
+        _tag: 'CompleteTask'
       },
       { onExcessProperty: 'error', errors: 'all' }
     );
