@@ -3,9 +3,9 @@ import { Effect, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 /**
- * All events must extend from this base, and are expected to have a `_tag` as well (see `EventBaseWithTag`)
+ * All events must extend from this base, and are expected to have a `_tag` as well (see `EventBaseType`)
  */
-export const EventBase = Schema.Struct({
+export const EventBaseSchema = Schema.Struct({
   _context: Schema.String,
   occurredOn: Schema.Date.pipe(
     Schema.propertySignature,
@@ -17,12 +17,12 @@ export const EventBase = Schema.Struct({
   )
 });
 
-type EventBaseWithTag = typeof EventBase.Type & { _tag: string };
+type EventBaseType = typeof EventBaseSchema.Type & { _tag: string };
 
 /**
  * Abstract service, defined in the `domain` layer, that allows publishing of arbitrary domain events
  */
-export type DomainEventPublisher<EventType extends EventBaseWithTag> = {
+export type DomainEventPublisher<EventType extends EventBaseType> = {
   publish(event: EventType): Effect.Effect<void>;
 };
 
@@ -31,7 +31,7 @@ export type DomainEventPublisher<EventType extends EventBaseWithTag> = {
  * This is a linchpin service that enables an event-driven architecture
  */
 export type EventHandlerService = {
-  register<Q extends EventBaseWithTag, I, R extends never, Err, Req>(
+  register<Q extends EventBaseType, I, R extends never, Err, Req>(
     eventSchema: Schema.Schema<Q, I, R>,
     triggers: {
       context: Schema.Schema<Q, I, R>['Type']['_context'];

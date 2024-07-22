@@ -10,6 +10,7 @@ import type {
 } from 'kysely';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 import { Schema } from '@effect/schema';
+import type { EventBaseSchema } from '@hex-effect/core';
 
 export type StoredEvent = {
   id: string;
@@ -25,7 +26,7 @@ export type StoredEvent = {
 export type EventStoreService = {
   getUnpublished: () => Effect.Effect<StoredEvent[], LibsqlError>;
   markPublished: (ids: string[]) => Effect.Effect<void, LibsqlError>;
-  save: (event: { occurredOn: string; messageId: string }) => Effect.Effect<void, LibsqlError>;
+  save: (event: Schema.Schema.Encoded<typeof EventBaseSchema>) => Effect.Effect<void, LibsqlError>;
 };
 
 export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
