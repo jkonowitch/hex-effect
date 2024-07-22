@@ -16,6 +16,6 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2022",
-    "types": ["bun-types"]
+    "types": ["@types/bun"]
   }
 }
