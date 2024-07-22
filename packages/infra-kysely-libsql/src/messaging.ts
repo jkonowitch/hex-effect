@@ -1,47 +1,11 @@
 import { Schema } from '@effect/schema';
 import { EventHandlerService } from '@hex-effect/core';
-import { LibsqlError } from '@libsql/client';
 import { Context, Data, Effect, Either, Layer, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
-import type {
-  ConsumerInfo,
-  ConsumerUpdateConfig,
-  JetStreamClient,
-  JetStreamManager,
-  StreamInfo
-} from 'nats';
+import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
 import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
-
-type Events = {
-  id: string;
-  payload: string;
-  tag: string;
-  context: string;
-}[];
-
-export type EventStoreService = {
-  getUnpublished: () => Effect.Effect<Events, LibsqlError>;
-  markPublished: (ids: string[]) => Effect.Effect<void, LibsqlError>;
-  save: (event: { occurredOn: string; messageId: string }) => Effect.Effect<void, LibsqlError>;
-};
-
-export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
-  ApplicationNamespace: Schema.String,
-  BoundedContext: Schema.String,
-  EventTag: Schema.String
-}) {
-  get asSubject(): string {
-    return `${this.ApplicationNamespace}.${this.BoundedContext}.${this.EventTag}`;
-  }
-}
-
-export type NatsService = {
-  jetstream: JetStreamClient;
-  jetstreamManager: JetStreamManager;
-  streamInfo: StreamInfo;
-  eventToSubject: (event: Pick<Events[number], 'context' | 'tag'>) => NatsSubject;
-};
+import { EventStoreService, NatsService, StoredEvent } from './service-definitions.js';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -56,7 +20,7 @@ const callNats = <T>(operation: Promise<T>) =>
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
 export const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
-  const publishEvent = (event: Events[number]) =>
+  const publishEvent = (event: StoredEvent) =>
     callNats(
       natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
         msgID: event.id,
