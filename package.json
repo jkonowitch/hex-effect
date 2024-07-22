@@ -12,12 +12,10 @@
     "@types/bun": "~1.1.6",
     "eslint": "^8.57.0"
   },
-  "packageManager": "bun@1.0.18",
-  "workspaces": [
-    "packages/*",
-    "contexts/**",
-    "apps/*"
-  ],
+  "engines": {
+    "bun": ">=1",
+    "pnpm": ">=9"
+  },
   "name": "hex-effect",
   "dependencies": {
     "@effect/platform": "^0.59.2",
