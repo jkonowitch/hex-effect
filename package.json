@@ -1,22 +1,24 @@
 {
+  "name": "hex-effect",
   "private": true,
   "scripts": {
-    "build": "bun --filter '*' build",
-    "dev": "bun --filter '*' dev",
-    "lint": "bun --filter '*' lint",
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run link",
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@types/bun": "~1.1.6",
+    "eslint": "^8.57.0",
     "prettier": "^3.2.5",
     "prettier-plugin-svelte": "^3.2.2",
-    "@types/bun": "~1.1.6",
-    "eslint": "^8.57.0"
+    "turbo": "^2.0.9"
   },
   "engines": {
     "bun": ">=1",
     "pnpm": ">=9"
   },
-  "name": "hex-effect",
+  "packageManager": "pnpm@9.4.0",
   "dependencies": {
     "@effect/platform": "^0.59.2",
     "@effect/rpc": "^0.32.2",
