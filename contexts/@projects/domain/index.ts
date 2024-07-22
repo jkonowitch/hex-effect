@@ -93,6 +93,7 @@ export class ProjectRepository extends Context.Tag('ProjectRepository')<
   {
     save(project: Project): Effect.Effect<void>;
     findById(id: typeof ProjectId.Type): Effect.Effect<Option<Project>>;
+    findAll(): Effect.Effect<Project[]>;
     nextId(): Effect.Effect<typeof ProjectId.Type>;
   }
 >() {}

@@ -58,6 +58,18 @@ const ProjectRepositoryLive = Layer.effect(
           });
 
           return Option.some(project);
+        }),
+      findAll: () =>
+        Effect.gen(function* () {
+          const { read, queryBuilder } = yield* FiberRef.get(session);
+
+          const records = yield* read(
+            queryBuilder.selectFrom('projects').selectAll().compile()
+          ).pipe(Effect.orDie);
+
+          return records.rows.map((project) =>
+            Schema.decodeSync(Project)({ ...project, _tag: 'Project' })
+          );
         })
     }))
   )

@@ -61,6 +61,13 @@ export class GetProjectWithTasks extends Schema.TaggedRequest<GetProjectWithTask
   }
 ) {}
 
+export class GetAllProjects extends Schema.TaggedRequest<GetAllProjects>()(
+  'GetAllProjects',
+  ApplicationError,
+  Schema.Array(Project),
+  {}
+) {}
+
 /**
  * Application Services
  */
@@ -113,6 +120,10 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     Effect.map(([project, tasks]) => Option.all({ project, tasks })),
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const getAllProjects = (_: GetAllProjects) =>
+  Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
 export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
   EventHandlerService,
@@ -167,7 +178,8 @@ export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
-  Rpc.effect(GetProjectWithTasks, projectWithTasks)
+  Rpc.effect(GetProjectWithTasks, projectWithTasks),
+  Rpc.effect(GetAllProjects, getAllProjects)
 );
 
 export type AppRouter = typeof router;
