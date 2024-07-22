@@ -26,6 +26,10 @@ All of this is made easy by the incredibly powerful `Effect` library. The centra
 
 ### Brief overview of DDD and Hexagonal Architecture
 
+![hexagonal architecutre](https://wata.es/wp-content/uploads/2021/05/diagrama-arquitectura-hexagonal-wata-factory-1024x796.png)
+
+_source: [Wata Factory](https://wata.es/hexagonal-architecture-introduction-and-structure/)_
+
 - Software is organized into multiple `bounded context`s.
 - Each `bounded context` is implemented as three concentric "layers": `domain`, `application` and `infrastructure`.
   - `domain`: expresses the ubiquitous language of your context through its data types and functions (aggregates, entities, repositories, domain events, e.g.).
