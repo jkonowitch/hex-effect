@@ -6,9 +6,9 @@ import { run, undecodedHandler } from '$lib/server';
 import { Cause, Exit, Either } from 'effect';
 import { Schema, ArrayFormatter } from '@effect/schema';
 
-export const load = (async () => {
+export const load = (async ({ params }) => {
   const res = await undecodedHandler(
-    new GetProjectWithTasks({ projectId: ProjectId.make('1oYFtjjN2eZDQ6RnbUsQ1') })
+    new GetProjectWithTasks({ projectId: ProjectId.make(params.id) })
   ).pipe(run);
 
   return Exit.match(res, {
@@ -18,19 +18,19 @@ export const load = (async () => {
 }) satisfies PageServerLoad;
 
 export const actions = {
-  default: async (event) => {
-    const data = await event.request.formData();
+  default: async ({ request, params }) => {
+    const data = await request.formData();
     const command = Schema.decodeUnknownEither(AddTask)(
       {
         description: data.get('description')?.toString(),
-        projectId: '1oYFtjjN2eZDQ6RnbUsQ1',
+        projectId: params.id,
         _tag: 'AddTask'
       },
       { onExcessProperty: 'error', errors: 'all' }
     );
 
     return Either.match(command, {
-      onLeft: (e) => fail(400, { kralf: ArrayFormatter.formatErrorSync(e) }),
+      onLeft: (e) => fail(400, { errors: ArrayFormatter.formatErrorSync(e) }),
       onRight: async (a) => {
         await undecodedHandler(a).pipe(run);
 

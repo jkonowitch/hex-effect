@@ -14,8 +14,8 @@
   {/each}
 </ul>
 
-{#if form?.kralf}
-  {#each form.kralf as issue}
+{#if form?.errors}
+  {#each form.errors as issue}
     <p>{issue.path}</p>
     <p>{issue.message}</p>
   {/each}
