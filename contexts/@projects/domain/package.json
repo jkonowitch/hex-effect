@@ -6,7 +6,8 @@
     "dev": "echo 'Add dev script here'",
     "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
     "test": "echo 'Add test script here'",
-    "lint": "echo 'Add lint script here'"
+    "lint": "echo 'Add lint script here'",
+    "check": "tsc --noEmit"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

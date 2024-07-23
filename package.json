@@ -4,7 +4,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "turbo run link",
+    "lint": "turbo run lint",
+    "check": "turbo run check",
     "format": "prettier --write ."
   },
   "devDependencies": {

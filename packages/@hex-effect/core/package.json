@@ -2,7 +2,8 @@
   "name": "@hex-effect/core",
   "version": "0.0.1",
   "scripts": {
-    "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist"
+    "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
+    "check": "tsc --noEmit"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
