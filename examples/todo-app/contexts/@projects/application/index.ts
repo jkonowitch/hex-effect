@@ -69,19 +69,8 @@ export class GetAllProjects extends Schema.TaggedRequest<GetAllProjects>()(
 ) {}
 
 /**
- * Application Services
+ * Use Cases
  */
-
-export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
-  TransactionalBoundary,
-  ITransactionalBoundary<Modes>
->() {}
-
-type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
-  Request.Request.Success<A>,
-  Request.Request.Error<A>,
-  unknown
->;
 
 const createProject = ({ title }: CreateProject) =>
   Effect.gen(function* () {
@@ -121,29 +110,22 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
     succeedOrNotFound()
   ) satisfies RequestHandler<GetProjectWithTasks>;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const getAllProjects = (_: GetAllProjects) =>
+const getAllProjects = () =>
   Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
-export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
-  EventHandlerService,
-  IEventHandlerService
->() {}
+export const router = Router.make(
+  Rpc.effect(CreateProject, createProject),
+  Rpc.effect(AddTask, addTask),
+  Rpc.effect(CompleteTask, completeTask),
+  Rpc.effect(GetProjectWithTasks, projectWithTasks),
+  Rpc.effect(GetAllProjects, getAllProjects)
+);
 
-const sendEmailAfterTaskCompleted = (e: (typeof TaskCompletedEvent)['Type']) =>
-  Effect.serviceFunctions(TaskRepository)
-    .findById(e.taskId)
-    .pipe(
-      succeedOrNotFound(),
-      Effect.andThen((task) => Effect.log(`Emailing regarding task: ${task.description}`))
-    );
+export type AppRouter = typeof router;
 
-const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
-  Match.value(e).pipe(
-    Match.tag('ProjectCreatedEvent', () => Effect.log('Project Created Event')),
-    Match.tag('TaskCompletedEvent', () => Effect.log('Task Completed Event')),
-    Match.exhaustive
-  );
+/**
+ * Event Handlers
+ */
 
 export const registerEvents = Effect.gen(function* () {
   const { register } = yield* EventHandlerService;
@@ -174,15 +156,40 @@ export const registerEvents = Effect.gen(function* () {
   );
 });
 
-export const router = Router.make(
-  Rpc.effect(CreateProject, createProject),
-  Rpc.effect(AddTask, addTask),
-  Rpc.effect(CompleteTask, completeTask),
-  Rpc.effect(GetProjectWithTasks, projectWithTasks),
-  Rpc.effect(GetAllProjects, getAllProjects)
-);
+const sendEmailAfterTaskCompleted = (e: (typeof TaskCompletedEvent)['Type']) =>
+  Effect.serviceFunctions(TaskRepository)
+    .findById(e.taskId)
+    .pipe(
+      succeedOrNotFound(),
+      Effect.andThen((task) => Effect.log(`Emailing regarding task: ${task.description}`))
+    );
 
-export type AppRouter = typeof router;
+const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
+  Match.value(e).pipe(
+    Match.tag('ProjectCreatedEvent', () => Effect.log('Project Created Event')),
+    Match.tag('TaskCompletedEvent', () => Effect.log('Task Completed Event')),
+    Match.exhaustive
+  );
+
+/**
+ * Application Services
+ */
+
+export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
+  TransactionalBoundary,
+  ITransactionalBoundary<Modes>
+>() {}
+
+export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
+  EventHandlerService,
+  IEventHandlerService
+>() {}
+
+type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
+  Request.Request.Success<A>,
+  Request.Request.Error<A>,
+  unknown
+>;
 
 /**
  * Utils
