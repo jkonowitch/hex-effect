@@ -1,6 +1,6 @@
 import { Config, Context, Effect, FiberRef, Layer } from 'effect';
 import { Kysely } from 'kysely';
-import { DB } from './persistence/schema.js';
+import type { DB } from './persistence/schema.js';
 import { createClient, type LibsqlError } from '@libsql/client';
 import {
   createDatabaseSession,

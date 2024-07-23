@@ -2,7 +2,10 @@
   "name": "@projects/application",
   "version": "0.0.0",
   "private": true,
-  "scripts": {},
+  "scripts": {
+    "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
+    "check": "tsc --noEmit"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*"
@@ -12,5 +15,14 @@
     "@hex-effect/core": "workspace:*",
     "@hex-effect/infra-kysely-libsql-nats": "workspace:*"
   },
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "default": {
+      "default": "./index.ts"
+    }
+  }
 }

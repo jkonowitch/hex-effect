@@ -2,10 +2,13 @@
   "name": "@discussion/domain",
   "version": "0.0.0",
   "private": true,
-  "scripts": {},
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "type": "module"
 }

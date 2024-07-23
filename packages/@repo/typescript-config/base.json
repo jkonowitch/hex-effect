@@ -6,6 +6,7 @@
     "declarationMap": true,
     "esModuleInterop": true,
     "incremental": false,
+    "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "lib": ["es2022", "DOM", "DOM.Iterable"],
     "module": "NodeNext",

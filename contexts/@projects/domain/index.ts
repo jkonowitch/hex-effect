@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { DomainEventPublisher, EventBaseSchema } from '@hex-effect/core';
+import { type DomainEventPublisher, EventBaseSchema } from '@hex-effect/core';
 import { Context, Effect } from 'effect';
 import type { Option } from 'effect/Option';
 
