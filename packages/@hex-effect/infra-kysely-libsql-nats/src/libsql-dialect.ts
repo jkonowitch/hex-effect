@@ -12,7 +12,7 @@ import {
 } from '@libsql/client';
 import {
   CompiledQuery,
-  IsolationLevel,
+  type IsolationLevel,
   Kysely,
   SqliteAdapter,
   SqliteIntrospector,

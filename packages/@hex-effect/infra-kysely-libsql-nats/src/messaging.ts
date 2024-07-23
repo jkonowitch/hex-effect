@@ -1,11 +1,11 @@
 import { Schema } from '@effect/schema';
-import { EventHandlerService } from '@hex-effect/core';
+import type { EventHandlerService } from '@hex-effect/core';
 import { Context, Data, Effect, Either, Layer, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
 import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
 import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
-import { EventStoreService, NatsService, StoredEvent } from './service-definitions.js';
+import type { EventStoreService, NatsService, StoredEvent } from './service-definitions.js';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {

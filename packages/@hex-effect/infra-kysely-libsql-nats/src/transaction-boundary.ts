@@ -21,7 +21,7 @@ import {
   Equal
 } from 'effect';
 import type { TransactionalBoundary } from '@hex-effect/core';
-import { InValue, LibsqlError } from '@libsql/client';
+import { type InValue, LibsqlError } from '@libsql/client';
 import { nanoid } from 'nanoid';
 import { makePublishingPipeline } from './messaging.js';
 import type {
