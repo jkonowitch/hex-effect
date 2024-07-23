@@ -2,14 +2,15 @@ import { AddTask, CompleteTask, GetProjectWithTasks } from '@projects/applicatio
 import type { PageServerLoad, Actions } from './$types';
 import { ProjectId } from '@projects/domain';
 import { error, fail } from '@sveltejs/kit';
-import { run, undecodedHandler } from '$lib/server';
+import { undecodedHandler } from '$lib/server';
 import { Cause, Exit, Either } from 'effect';
 import { Schema, ArrayFormatter } from '@effect/schema';
+import { managedRuntime } from '@projects/infra';
 
 export const load = (async ({ params }) => {
   const res = await undecodedHandler(
     new GetProjectWithTasks({ projectId: ProjectId.make(params.id) })
-  ).pipe(run);
+  ).pipe(managedRuntime.runPromiseExit);
 
   return Exit.match(res, {
     onSuccess: (data) => ({ data }),
@@ -32,7 +33,7 @@ export const actions = {
     return Either.match(command, {
       onLeft: (e) => fail(400, { errors: ArrayFormatter.formatErrorSync(e) }),
       onRight: async (a) => {
-        await undecodedHandler(a).pipe(run);
+        await undecodedHandler(a).pipe(managedRuntime.runPromise);
 
         return { success: true };
       }
@@ -51,7 +52,7 @@ export const actions = {
     return Either.match(command, {
       onLeft: (e) => fail(400, { errors: ArrayFormatter.formatErrorSync(e) }),
       onRight: async (a) => {
-        await undecodedHandler(a).pipe(run);
+        await undecodedHandler(a).pipe(managedRuntime.runPromise);
 
         return { success: true };
       }

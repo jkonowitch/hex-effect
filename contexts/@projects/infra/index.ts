@@ -6,6 +6,7 @@ import {
 } from '@hex-effect/infra-kysely-libsql-nats';
 import { DatabaseConnection, DatabaseSession, NatsService } from './services.js';
 import { DomainServiceLive, EventStore } from './repositories.js';
+import { asyncExitHook } from 'exit-hook';
 
 const TransactionalBoundaryLive = Effect.all([
   DatabaseConnection,
@@ -39,4 +40,11 @@ export const managedRuntime = ManagedRuntime.make(
     Layer.provide(Logger.minimumLogLevel(LogLevel.All)),
     Layer.orDie
   )
+);
+
+asyncExitHook(
+  async () => {
+    await managedRuntime.dispose();
+  },
+  { wait: 500 }
 );

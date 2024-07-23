@@ -1,12 +1,13 @@
-import { run, undecodedHandler } from '$lib/server';
+import { undecodedHandler } from '$lib/server';
 import { CreateProject, GetAllProjects } from '@projects/application';
 import type { PageServerLoad, Actions } from './$types';
 import { Cause, Either, Exit } from 'effect';
 import { error, fail } from '@sveltejs/kit';
 import { ArrayFormatter, Schema } from '@effect/schema';
+import { managedRuntime } from '@projects/infra';
 
 export const load = (async () => {
-  const res = await undecodedHandler(new GetAllProjects()).pipe(run);
+  const res = await undecodedHandler(new GetAllProjects()).pipe(managedRuntime.runPromiseExit);
 
   return Exit.match(res, {
     onSuccess: (data) => ({ data }),
@@ -28,7 +29,7 @@ export const actions = {
     return Either.match(command, {
       onLeft: (e) => fail(400, { errors: ArrayFormatter.formatErrorSync(e) }),
       onRight: async (a) => {
-        await undecodedHandler(a).pipe(run);
+        await undecodedHandler(a).pipe(managedRuntime.runPromise);
 
         return { success: true };
       }
