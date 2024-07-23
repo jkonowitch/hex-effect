@@ -46,24 +46,108 @@ importers:
         specifier: ^5.3.3
         version: 5.5.3
 
-  apps/web:
-    dependencies:
-      '@projects/application':
-        specifier: workspace:*
-        version: link:../../contexts/@projects/application
-      '@projects/domain':
-        specifier: workspace:*
-        version: link:../../contexts/@projects/domain
-      '@projects/infra':
-        specifier: workspace:*
-        version: link:../../contexts/@projects/infra
-      '@repo/ui':
-        specifier: workspace:*
-        version: link:../../packages/@repo/ui
+  examples/todo-app/contexts/@discussion/domain:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
-        version: link:../../packages/@repo/config-eslint
+        version: link:../../../../../packages/@repo/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/typescript-config
+
+  examples/todo-app/contexts/@projects/application:
+    dependencies:
+      '@hex-effect/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/core
+      '@hex-effect/infra-kysely-libsql-nats':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/infra-kysely-libsql-nats
+      '@projects/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/typescript-config
+
+  examples/todo-app/contexts/@projects/domain:
+    dependencies:
+      '@hex-effect/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/core
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/typescript-config
+
+  examples/todo-app/contexts/@projects/infra:
+    dependencies:
+      '@hex-effect/infra-kysely-libsql-nats':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/infra-kysely-libsql-nats
+      '@libsql/client':
+        specifier: ~0.7.0
+        version: 0.7.0
+      '@projects/application':
+        specifier: workspace:*
+        version: link:../application
+      '@projects/domain':
+        specifier: workspace:*
+        version: link:../domain
+      kysely:
+        specifier: ^0.27.4
+        version: 0.27.4
+      nanoid:
+        specifier: ^5.0.7
+        version: 5.0.7
+      nats:
+        specifier: ^2.28.0
+        version: 2.28.0
+    devDependencies:
+      '@libsql/kysely-libsql':
+        specifier: ^0.4.0
+        version: 0.4.0(kysely@0.27.4)
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/typescript-config
+      dotenv-cli:
+        specifier: ^7.4.2
+        version: 7.4.2
+      kysely-codegen:
+        specifier: ^0.15.0
+        version: 0.15.0(@libsql/kysely-libsql@0.4.0(kysely@0.27.4))(kysely@0.27.4)
+      kysely-ctl:
+        specifier: ^0.8.9
+        version: 0.8.11(kysely@0.27.4)
+
+  examples/todo-app/web:
+    dependencies:
+      '@projects/application':
+        specifier: workspace:*
+        version: link:../contexts/@projects/application
+      '@projects/domain':
+        specifier: workspace:*
+        version: link:../contexts/@projects/domain
+      '@projects/infra':
+        specifier: workspace:*
+        version: link:../contexts/@projects/infra
+      '@repo/ui':
+        specifier: workspace:*
+        version: link:../../../packages/@repo/ui
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../packages/@repo/config-eslint
       '@rollup/plugin-node-resolve':
         specifier: ^15.2.3
         version: 15.2.3(rollup@4.19.0)
@@ -104,89 +188,29 @@ importers:
         specifier: ^1.3.1
         version: 1.6.0(@types/node@20.12.14)
 
-  contexts/@discussion/domain:
-    devDependencies:
-      '@repo/eslint-config':
-        specifier: workspace:*
-        version: link:../../../packages/@repo/config-eslint
-      '@repo/typescript-config':
-        specifier: workspace:*
-        version: link:../../../packages/@repo/typescript-config
-
-  contexts/@projects/application:
+  examples/todo-app/web/build:
     dependencies:
-      '@hex-effect/core':
-        specifier: workspace:*
-        version: link:../../../packages/@hex-effect/core
-      '@hex-effect/infra-kysely-libsql-nats':
-        specifier: workspace:*
-        version: link:../../../packages/@hex-effect/infra-kysely-libsql-nats
-      '@projects/domain':
-        specifier: workspace:*
-        version: link:../domain
-    devDependencies:
-      '@repo/eslint-config':
-        specifier: workspace:*
-        version: link:../../../packages/@repo/config-eslint
-      '@repo/typescript-config':
-        specifier: workspace:*
-        version: link:../../../packages/@repo/typescript-config
-
-  contexts/@projects/domain:
-    dependencies:
-      '@hex-effect/core':
-        specifier: workspace:*
-        version: link:../../../packages/@hex-effect/core
-    devDependencies:
-      '@repo/eslint-config':
-        specifier: workspace:*
-        version: link:../../../packages/@repo/config-eslint
-      '@repo/typescript-config':
-        specifier: workspace:*
-        version: link:../../../packages/@repo/typescript-config
-
-  contexts/@projects/infra:
-    dependencies:
-      '@hex-effect/infra-kysely-libsql-nats':
-        specifier: workspace:*
-        version: link:../../../packages/@hex-effect/infra-kysely-libsql-nats
-      '@libsql/client':
-        specifier: ~0.7.0
-        version: 0.7.0
       '@projects/application':
         specifier: workspace:*
-        version: link:../application
+        version: link:../../contexts/@projects/application
       '@projects/domain':
         specifier: workspace:*
-        version: link:../domain
-      kysely:
-        specifier: ^0.27.4
-        version: 0.27.4
-      nanoid:
-        specifier: ^5.0.7
-        version: 5.0.7
-      nats:
-        specifier: ^2.28.0
-        version: 2.28.0
-    devDependencies:
-      '@libsql/kysely-libsql':
-        specifier: ^0.4.0
-        version: 0.4.0(kysely@0.27.4)
-      '@repo/eslint-config':
+        version: link:../../contexts/@projects/domain
+      '@projects/infra':
         specifier: workspace:*
-        version: link:../../../packages/@repo/config-eslint
-      '@repo/typescript-config':
+        version: link:../../contexts/@projects/infra
+      '@repo/ui':
         specifier: workspace:*
-        version: link:../../../packages/@repo/typescript-config
-      dotenv-cli:
-        specifier: ^7.4.2
-        version: 7.4.2
-      kysely-codegen:
-        specifier: ^0.15.0
-        version: 0.15.0(@libsql/kysely-libsql@0.4.0(kysely@0.27.4))(kysely@0.27.4)
-      kysely-ctl:
-        specifier: ^0.8.9
-        version: 0.8.11(kysely@0.27.4)
+        version: link:../../../../packages/@repo/ui
+      cookie:
+        specifier: latest
+        version: 0.6.0
+      devalue:
+        specifier: latest
+        version: 5.0.0
+      set-cookie-parser:
+        specifier: latest
+        version: 2.6.0
 
   packages/@hex-effect/core:
     dependencies:
