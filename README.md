@@ -1,6 +1,6 @@
 # Hex-Effect
 
-A functional reference implementation of the [Hexagonal Architecture](<https://en.wikipedia.org/wiki/Hexagonal_architecture_(software)>) for [Domain Driven Design](https://www.domainlanguage.com/ddd/).
+A reference implementation of the [Hexagonal Architecture](<https://en.wikipedia.org/wiki/Hexagonal_architecture_(software)>) for [Domain Driven Design](https://www.domainlanguage.com/ddd/).
 
 Written in Typescript, built with [`Effect`](https://effect.website/).
 
