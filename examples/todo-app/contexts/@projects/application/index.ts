@@ -2,7 +2,6 @@ import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
 import type { Modes } from '@hex-effect/infra-kysely-libsql-nats';
-import type { TransactionalBoundary as ITransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   TaskCompletedEvent,
@@ -98,7 +97,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
       Effect.flatMap(Task.complete)
     );
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
+  }) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -174,11 +173,6 @@ const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
 /**
  * Application Services
  */
-
-export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
-  TransactionalBoundary,
-  ITransactionalBoundary<Modes>
->() {}
 
 export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
   EventHandlerService,

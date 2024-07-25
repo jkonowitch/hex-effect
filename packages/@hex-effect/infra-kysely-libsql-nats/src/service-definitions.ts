@@ -1,16 +1,18 @@
-import type { Client, LibsqlError } from '@libsql/client';
-import type { Effect, FiberRef } from 'effect';
-import type {
+import { createClient, type Client, type Config, type LibsqlError } from '@libsql/client';
+import { Context, Effect, FiberRef, Layer, PubSub } from 'effect';
+import {
   Kysely,
-  InsertResult,
-  UpdateResult,
-  DeleteResult,
-  CompiledQuery,
-  QueryResult
+  type InsertResult,
+  type UpdateResult,
+  type DeleteResult,
+  type CompiledQuery,
+  type QueryResult,
+  Transaction
 } from 'kysely';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 import { Schema } from '@effect/schema';
-import type { EventBaseSchema } from '@hex-effect/core';
+import type { EventBaseSchema, TransactionalBoundary } from '@hex-effect/core';
+import { LibsqlDialect } from './libsql-dialect.js';
 
 export type StoredEvent = {
   id: string;
@@ -46,8 +48,8 @@ export type NatsService = {
   eventToSubject: (event: Pick<StoredEvent, 'context' | 'tag'>) => NatsSubject;
 };
 
-export type DatabaseConnection<DB> = {
-  db: Kysely<DB>;
+export type DatabaseConnectionService = {
+  db: Kysely<unknown>;
   client: Client;
 };
 
@@ -64,8 +66,68 @@ export type ReadonlyQuery<C> =
  * Service which controls read/write access to the database, as well as providing a query builder.
  * Database interaction is mediated by this service to ensure it behaves properly within a `TransactionalBoundary`
  */
-export type DatabaseSession<DB, E> = FiberRef.FiberRef<{
-  readonly write: (op: CompiledQuery) => Effect.Effect<void, E>;
-  readonly read: <Q>(op: ReadonlyQuery<CompiledQuery<Q>>) => Effect.Effect<QueryResult<Q>, E>;
-  readonly queryBuilder: Kysely<DB>;
+export type DatabaseSessionService = FiberRef.FiberRef<{
+  readonly write: (op: CompiledQuery) => Effect.Effect<void, LibsqlError>;
+  readonly read: <Q>(
+    op: ReadonlyQuery<CompiledQuery<Q>>
+  ) => Effect.Effect<QueryResult<Q>, LibsqlError>;
 }>;
+
+export class DatabaseConnection extends Context.Tag('DatabaseConnection')<
+  DatabaseConnection,
+  DatabaseConnectionService
+>() {
+  public static live = (config: Config) =>
+    Layer.scoped(
+      DatabaseConnection,
+      Effect.gen(function* () {
+        const client = createClient(config);
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => client.close()).pipe(
+            Effect.tap(Effect.logDebug('Database connection closed'))
+          )
+        );
+        return {
+          client,
+          db: new Kysely({ dialect: new LibsqlDialect({ client }) })
+        };
+      })
+    );
+}
+
+type FiberRefValue<T> = T extends FiberRef.FiberRef<infer V> ? V : never;
+
+export class DatabaseSession extends Context.Tag('DatabaseSession')<
+  DatabaseSession,
+  DatabaseSessionService
+>() {
+  public static live = Layer.scoped(
+    DatabaseSession,
+    DatabaseConnection.pipe(
+      Effect.andThen(({ db }) => FiberRef.make(this.createDatabaseSession(db)))
+    )
+  );
+
+  public static createDatabaseSession = (
+    db: Kysely<unknown> | Transaction<unknown>
+  ): FiberRefValue<DatabaseSessionService> => {
+    return {
+      read<Q>(op: ReadonlyQuery<CompiledQuery<Q>>) {
+        return Effect.promise(() => db.executeQuery(op));
+      },
+      write(op) {
+        return Effect.promise(() => db.executeQuery(op));
+      }
+    };
+  };
+}
+
+export class TransactionEvents extends Context.Tag('TransactionEvents')<
+  TransactionEvents,
+  PubSub.PubSub<keyof TransactionalBoundary<unknown>>
+>() {
+  public static live = Layer.effect(
+    TransactionEvents,
+    PubSub.sliding<keyof TransactionalBoundary<unknown>>(10)
+  );
+}

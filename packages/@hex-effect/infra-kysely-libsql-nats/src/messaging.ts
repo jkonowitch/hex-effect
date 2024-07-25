@@ -1,11 +1,16 @@
 import { Schema } from '@effect/schema';
 import type { EventHandlerService } from '@hex-effect/core';
-import { Context, Data, Effect, Either, Layer, Stream } from 'effect';
+import { Context, Data, Effect, Either, Equal, Layer, PubSub, Queue, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
 import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
 import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
-import type { EventStoreService, NatsService, StoredEvent } from './service-definitions.js';
+import {
+  TransactionEvents,
+  type EventStoreService,
+  type NatsService,
+  type StoredEvent
+} from './service-definitions.js';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -13,13 +18,32 @@ class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   }
 }
 
+// const publishingPipeline = makePublishingPipeline(eventStore, natsService);
+
+const EventPublishingDaemon = Layer.scopedDiscard(
+  Effect.gen(function* () {
+    const pub = yield* TransactionEvents;
+    const dequeue = yield* PubSub.subscribe(pub);
+    yield* Queue.take(dequeue)
+      .pipe(
+        Effect.map(Equal.equals('commit')),
+        Effect.if({
+          onTrue: () => publishingPipeline,
+          onFalse: () => Effect.void
+        }),
+        Effect.forever
+      )
+      .pipe(Effect.forkScoped);
+  })
+);
+
 const callNats = <T>(operation: Promise<T>) =>
   Effect.tryPromise({
     try: () => operation,
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-export const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
+const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
   const publishEvent = (event: StoredEvent) =>
     callNats(
       natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {

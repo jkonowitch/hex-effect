@@ -6,6 +6,6 @@ export {
   type DatabaseConnection,
   type EventStoreService,
   type NatsService,
-  type DatabaseSession,
+  type DatabaseSessionService as DatabaseSession,
   NatsSubject
 } from './src/service-definitions.js';

@@ -1,12 +1,4 @@
-import {
-  DummyDriver,
-  Kysely,
-  SqliteAdapter,
-  SqliteIntrospector,
-  SqliteQueryCompiler,
-  Transaction,
-  type CompiledQuery
-} from 'kysely';
+import { Kysely, Transaction, type CompiledQuery } from 'kysely';
 import {
   Effect,
   FiberRef,
@@ -17,65 +9,27 @@ import {
   pipe,
   Context,
   Layer,
-  Queue,
-  Equal
+  Scope,
+  Fiber
 } from 'effect';
-import type { TransactionalBoundary } from '@hex-effect/core';
-import { type InValue, LibsqlError } from '@libsql/client';
-import { nanoid } from 'nanoid';
-import { makePublishingPipeline } from './messaging.js';
-import type {
-  DatabaseConnection,
-  DatabaseSession,
-  EventStoreService,
-  NatsService,
-  ReadonlyQuery
-} from './service-definitions.js';
+import type { TransactionalBoundary as ITransactionalBoundary } from '@hex-effect/core';
+import { type InValue } from '@libsql/client';
+import { DatabaseConnection, DatabaseSession, TransactionEvents } from './service-definitions.js';
 
-type LibsqlTransactionalBoundary = TransactionalBoundary<Modes>;
+type LibsqlTransactionalBoundary = ITransactionalBoundary<Modes>;
 
-export const makeTransactionalBoundary = <DB, S>(
-  connection: DatabaseConnection<DB>,
-  session: DatabaseSession<DB, LibsqlError>,
-  eventStore: EventStoreService,
-  natsService: NatsService,
-  tag: Context.Tag<S, LibsqlTransactionalBoundary>
-) => {
-  const { client, db } = connection;
-  let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
-
-  class TransactionEvents extends Context.Tag(nanoid())<
-    TransactionEvents,
-    PubSub.PubSub<keyof LibsqlTransactionalBoundary>
-  >() {
-    public static live = Layer.effect(
-      TransactionEvents,
-      PubSub.sliding<keyof LibsqlTransactionalBoundary>(10)
-    );
-  }
-
-  const publishingPipeline = makePublishingPipeline(eventStore, natsService);
-
-  const EventPublishingDaemon = Layer.scopedDiscard(
+export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
+  TransactionalBoundary,
+  LibsqlTransactionalBoundary
+>() {
+  public static live = Layer.effect(
+    TransactionalBoundary,
     Effect.gen(function* () {
+      const { client, db } = yield* DatabaseConnection;
+      let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
       const pub = yield* TransactionEvents;
-      const dequeue = yield* PubSub.subscribe(pub);
-      yield* Queue.take(dequeue)
-        .pipe(
-          Effect.map(Equal.equals('commit')),
-          Effect.if({
-            onTrue: () => publishingPipeline,
-            onFalse: () => Effect.void
-          }),
-          Effect.forever
-        )
-        .pipe(Effect.forkScoped);
-    })
-  );
-
-  const boundaryEffect = TransactionEvents.pipe(
-    Effect.map(
-      (pub): LibsqlTransactionalBoundary => ({
+      const session = yield* DatabaseSession;
+      const boundary: LibsqlTransactionalBoundary = {
         begin: (mode) =>
           Match.value(mode)
             .pipe(
@@ -83,7 +37,14 @@ export const makeTransactionalBoundary = <DB, S>(
                 Effect.gen(function* () {
                   const ref = yield* FiberRef.make<TransactionSession>(Batched({ writes: [] }));
                   maybeTransactionSession = Option.some(ref);
-                  yield* FiberRef.set(session, createBatchedDatabaseSession(db, ref));
+                  yield* FiberRef.getAndUpdate(session, (current) => ({
+                    ...current,
+                    write(op) {
+                      return FiberRef.update(ref, (a) =>
+                        $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
+                      );
+                    }
+                  }));
                 })
               ),
               Match.when('Serialized', () =>
@@ -91,13 +52,12 @@ export const makeTransactionalBoundary = <DB, S>(
                   const tx = yield* initiateTransaction(db);
                   const ref = yield* FiberRef.make<TransactionSession>(Serialized({ tx }));
                   maybeTransactionSession = Option.some(ref);
-                  yield* FiberRef.set(session, createDatabaseSession(tx.tx));
+                  yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
                 })
               ),
               Match.exhaustive
             )
             .pipe(Effect.tap(() => PubSub.publish(pub, 'begin'))),
-
         commit: () =>
           // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
           FiberRef.get(Option.getOrThrow(maybeTransactionSession)).pipe(
@@ -126,42 +86,39 @@ export const makeTransactionalBoundary = <DB, S>(
             ),
             Effect.tap(() => PubSub.publish(pub, 'rollback'))
           )
-      })
-    )
+      };
+
+      return boundary;
+    })
   );
+}
 
-  const layer = Layer.effect(tag, boundaryEffect).pipe(
-    Layer.provide(EventPublishingDaemon),
-    Layer.provide(TransactionEvents.live)
-  );
+export function withTransactionalBoundary(mode: Modes = 'Batched') {
+  return <A, E, R>(
+    eff: Effect.Effect<A, E, R>
+  ): Effect.Effect<A, E, Context.Tag.Identifier<TransactionalBoundary> | Exclude<R, Scope.Scope>> =>
+    Effect.gen(function* () {
+      const fiber = yield* Effect.gen(function* () {
+        const tx = yield* TransactionalBoundary;
+        yield* tx.begin(mode);
+        const result = yield* eff.pipe(Effect.tapError(tx.rollback));
+        yield* tx.commit();
+        return result;
+      }).pipe(Effect.scoped, Effect.fork);
 
-  return layer;
-};
+      const exit = yield* Fiber.await(fiber);
+      return yield* exit;
+    });
+}
 
-type FiberRefValue<T> = T extends FiberRef.FiberRef<infer V> ? V : never;
-
-export const createDatabaseSession = <DB>(
-  db: Kysely<DB>
-): FiberRefValue<DatabaseSession<DB, LibsqlError>> => {
-  return {
-    read<Q>(op: ReadonlyQuery<CompiledQuery<Q>>) {
-      return Effect.promise(() => db.executeQuery(op));
-    },
-    write(op) {
-      return Effect.promise(() => db.executeQuery(op));
-    },
-    queryBuilder: coldInstance as Kysely<DB>
-  };
-};
-
-const coldInstance = new Kysely<unknown>({
-  dialect: {
-    createAdapter: () => new SqliteAdapter(),
-    createDriver: () => new DummyDriver(),
-    createIntrospector: (db) => new SqliteIntrospector(db),
-    createQueryCompiler: () => new SqliteQueryCompiler()
-  }
-});
+// const coldInstance = new Kysely<unknown>({
+//   dialect: {
+//     createAdapter: () => new SqliteAdapter(),
+//     createDriver: () => new DummyDriver(),
+//     createIntrospector: (db) => new SqliteIntrospector(db),
+//     createQueryCompiler: () => new SqliteQueryCompiler()
+//   }
+// });
 
 export type Modes = Exclude<TransactionSession['_tag'], 'None'>;
 
@@ -211,17 +168,3 @@ class RollbackError extends Data.TaggedError('RollbackError') {
     return e instanceof this && e._tag === 'RollbackError';
   }
 }
-
-const createBatchedDatabaseSession = <DB>(
-  hotInstance: Kysely<DB>,
-  transactionSession: FiberRef.FiberRef<TransactionSession>
-): FiberRefValue<DatabaseSession<DB, LibsqlError>> => {
-  return {
-    ...createDatabaseSession(hotInstance),
-    write(op) {
-      return FiberRef.update(transactionSession, (a) =>
-        $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
-      );
-    }
-  };
-};
