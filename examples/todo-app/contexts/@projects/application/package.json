@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@projects/domain": "workspace:*",
-    "@hex-effect/core": "workspace:*",
+    "@hex-effect/core": "workspace:*"
+  },
+  "peerDependencies": {
     "@hex-effect/infra-kysely-libsql-nats": "workspace:*"
   },
   "type": "module",

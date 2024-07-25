@@ -188,6 +188,7 @@ export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, Eve
           getUnpublished: () =>
             Effect.gen(function* () {
               const { read } = yield* FiberRef.get(session);
+
               return yield* read(
                 queryBuilder
                   .selectFrom('events')

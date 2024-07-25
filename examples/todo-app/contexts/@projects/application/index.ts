@@ -1,7 +1,10 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
-import { withTransactionalBoundary } from '@hex-effect/infra-kysely-libsql-nats';
+import {
+  TransactionalBoundary,
+  withTransactionalBoundary
+} from '@hex-effect/infra-kysely-libsql-nats';
 import {
   Project,
   TaskCompletedEvent,
@@ -10,7 +13,8 @@ import {
   Task,
   TaskId,
   TaskRepository,
-  ProjectDomainEvents
+  ProjectDomainEvents,
+  DomainPublisher
 } from '@projects/domain';
 import { Effect, type Request, Option, pipe, Context, Match } from 'effect';
 import { get } from 'effect/Struct';
@@ -112,7 +116,10 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
 const getAllProjects = () =>
   Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
-export const router = Router.make(
+export const router: Router.Router<
+  CreateProject | AddTask | CompleteTask | GetProjectWithTasks | GetAllProjects,
+  ProjectRepository | DomainPublisher | TransactionalBoundary | TaskRepository
+> = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
