@@ -111,7 +111,7 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
     });
 }
 
-export type Modes = Exclude<TransactionSession['_tag'], 'None'>;
+type Modes = Exclude<TransactionSession['_tag'], 'None'>;
 
 type DBTX = {
   commit: Effect.Effect<void>;

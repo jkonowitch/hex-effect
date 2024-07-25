@@ -48,34 +48,21 @@ export type NatsService = {
   eventToSubject: (event: Pick<StoredEvent, 'context' | 'tag'>) => NatsSubject;
 };
 
-export type DatabaseConnectionService = {
-  db: Kysely<unknown>;
-  client: Client;
-};
-
 type ExcludedTypes = [InsertResult, UpdateResult, DeleteResult];
 
-export type ReadonlyQuery<C> =
+type ReadonlyQuery<C> =
   C extends CompiledQuery<infer T>
     ? T extends ExcludedTypes[number]
       ? never
       : CompiledQuery<T>
     : never;
 
-/**
- * Service which controls read/write access to the database, as well as providing a query builder.
- * Database interaction is mediated by this service to ensure it behaves properly within a `TransactionalBoundary`
- */
-export type DatabaseSessionService = FiberRef.FiberRef<{
-  readonly write: (op: CompiledQuery) => Effect.Effect<void, LibsqlError>;
-  readonly read: <Q>(
-    op: ReadonlyQuery<CompiledQuery<Q>>
-  ) => Effect.Effect<QueryResult<Q>, LibsqlError>;
-}>;
-
 export class DatabaseConnection extends Context.Tag('DatabaseConnection')<
   DatabaseConnection,
-  DatabaseConnectionService
+  {
+    db: Kysely<unknown>;
+    client: Client;
+  }
 >() {
   public static live = (config: Config) =>
     Layer.scoped(
@@ -97,9 +84,18 @@ export class DatabaseConnection extends Context.Tag('DatabaseConnection')<
 
 type FiberRefValue<T> = T extends FiberRef.FiberRef<infer V> ? V : never;
 
+/**
+ * Service which controls read/write access to the database, as well as providing a query builder.
+ * Database interaction is mediated by this service to ensure it behaves properly within a `TransactionalBoundary`
+ */
 export class DatabaseSession extends Context.Tag('DatabaseSession')<
   DatabaseSession,
-  DatabaseSessionService
+  FiberRef.FiberRef<{
+    readonly write: (op: CompiledQuery) => Effect.Effect<void, LibsqlError>;
+    readonly read: <Q>(
+      op: ReadonlyQuery<CompiledQuery<Q>>
+    ) => Effect.Effect<QueryResult<Q>, LibsqlError>;
+  }>
 >() {
   public static live = Layer.scoped(
     DatabaseSession,
@@ -110,7 +106,7 @@ export class DatabaseSession extends Context.Tag('DatabaseSession')<
 
   public static createDatabaseSession = (
     db: Kysely<unknown> | Transaction<unknown>
-  ): FiberRefValue<DatabaseSessionService> => {
+  ): FiberRefValue<Context.Tag.Service<typeof DatabaseSession>> => {
     return {
       read<Q>(op: ReadonlyQuery<CompiledQuery<Q>>) {
         return Effect.promise(() => db.executeQuery(op));
