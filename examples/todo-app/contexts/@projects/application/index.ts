@@ -1,7 +1,7 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
 import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
-import type { Modes } from '@hex-effect/infra-kysely-libsql-nats';
+import { withTransactionalBoundary } from '@hex-effect/infra-kysely-libsql-nats';
 import {
   Project,
   TaskCompletedEvent,
@@ -12,7 +12,7 @@ import {
   TaskRepository,
   ProjectDomainEvents
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Scope, Context, Match, Fiber } from 'effect';
+import { Effect, type Request, Option, pipe, Context, Match } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -199,22 +199,4 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
         })
       )
     );
-}
-
-function withTransactionalBoundary(mode: Modes = 'Batched') {
-  return <A, E, R>(
-    eff: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
-    Effect.gen(function* () {
-      const fiber = yield* Effect.gen(function* () {
-        const tx = yield* TransactionalBoundary;
-        yield* tx.begin(mode);
-        const result = yield* eff.pipe(Effect.tapError(tx.rollback));
-        yield* tx.commit();
-        return result;
-      }).pipe(Effect.scoped, Effect.fork);
-
-      const exit = yield* Fiber.await(fiber);
-      return yield* exit;
-    });
 }

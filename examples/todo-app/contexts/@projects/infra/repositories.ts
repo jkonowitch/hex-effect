@@ -16,8 +16,24 @@ import {
 import { Layer, Effect, FiberRef, Option, Context } from 'effect';
 import { omit } from 'effect/Struct';
 import { nanoid } from 'nanoid';
-import { DatabaseSession } from './services.js';
-import type { EventStoreService } from '@hex-effect/infra-kysely-libsql-nats';
+import { DatabaseSession, type EventStoreService } from '@hex-effect/infra-kysely-libsql-nats';
+import {
+  DummyDriver,
+  Kysely,
+  SqliteAdapter,
+  SqliteIntrospector,
+  SqliteQueryCompiler
+} from 'kysely';
+import type { DB } from './persistence/schema.js';
+
+const queryBuilder = new Kysely<DB>({
+  dialect: {
+    createAdapter: () => new SqliteAdapter(),
+    createDriver: () => new DummyDriver(),
+    createIntrospector: (db) => new SqliteIntrospector(db),
+    createQueryCompiler: () => new SqliteQueryCompiler()
+  }
+});
 
 const ProjectRepositoryLive = Layer.effect(
   ProjectRepository,
@@ -29,7 +45,7 @@ const ProjectRepositoryLive = Layer.effect(
       save: (project: Project) =>
         Effect.gen(function* () {
           const encoded = Schema.encodeSync(Project)(project);
-          const { write, queryBuilder } = yield* FiberRef.get(session);
+          const { write } = yield* FiberRef.get(session);
           yield* write(
             queryBuilder
               .insertInto('projects')
@@ -40,7 +56,7 @@ const ProjectRepositoryLive = Layer.effect(
         }),
       findById: (id: (typeof ProjectId)['Type']) =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* FiberRef.get(session);
+          const { read } = yield* FiberRef.get(session);
 
           const record = yield* read(
             queryBuilder.selectFrom('projects').selectAll().where('id', '=', id).compile()
@@ -61,7 +77,7 @@ const ProjectRepositoryLive = Layer.effect(
         }),
       findAll: () =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* FiberRef.get(session);
+          const { read } = yield* FiberRef.get(session);
 
           const records = yield* read(
             queryBuilder.selectFrom('projects').selectAll().compile()
@@ -95,7 +111,7 @@ const TaskRepositoryLive = Layer.effect(
       save: (task: Task) =>
         Effect.gen(function* () {
           const encoded = Schema.encodeSync(RefinedTask)(task);
-          const { write, queryBuilder } = yield* FiberRef.get(session);
+          const { write } = yield* FiberRef.get(session);
           yield* write(
             queryBuilder
               .insertInto('tasks')
@@ -111,7 +127,7 @@ const TaskRepositoryLive = Layer.effect(
         }),
       findById: (id: (typeof TaskId)['Type']) =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* FiberRef.get(session);
+          const { read } = yield* FiberRef.get(session);
 
           const record = yield* read(
             queryBuilder.selectFrom('tasks').selectAll().where('id', '=', id).compile()
@@ -131,7 +147,7 @@ const TaskRepositoryLive = Layer.effect(
         }),
       findAllByProjectId: (projectId: (typeof ProjectId)['Type']) =>
         Effect.gen(function* () {
-          const { read, queryBuilder } = yield* FiberRef.get(session);
+          const { read } = yield* FiberRef.get(session);
 
           const { rows: records } = yield* read(
             queryBuilder
@@ -171,7 +187,7 @@ export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, Eve
         const service: EventStoreService = {
           getUnpublished: () =>
             Effect.gen(function* () {
-              const { read, queryBuilder } = yield* FiberRef.get(session);
+              const { read } = yield* FiberRef.get(session);
               return yield* read(
                 queryBuilder
                   .selectFrom('events')
@@ -187,7 +203,7 @@ export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, Eve
             }),
           markPublished: (ids: string[]) =>
             Effect.gen(function* () {
-              const { write, queryBuilder } = yield* FiberRef.get(session);
+              const { write } = yield* FiberRef.get(session);
               yield* write(
                 queryBuilder
                   .updateTable('events')
@@ -198,7 +214,7 @@ export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, Eve
             }),
           save: (encoded) =>
             Effect.gen(function* () {
-              const { write, queryBuilder } = yield* FiberRef.get(session);
+              const { write } = yield* FiberRef.get(session);
 
               yield* write(
                 queryBuilder

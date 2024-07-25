@@ -111,15 +111,6 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
     });
 }
 
-// const coldInstance = new Kysely<unknown>({
-//   dialect: {
-//     createAdapter: () => new SqliteAdapter(),
-//     createDriver: () => new DummyDriver(),
-//     createIntrospector: (db) => new SqliteIntrospector(db),
-//     createQueryCompiler: () => new SqliteQueryCompiler()
-//   }
-// });
-
 export type Modes = Exclude<TransactionSession['_tag'], 'None'>;
 
 type DBTX = {
