@@ -116,6 +116,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
 const getAllProjects = () =>
   Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
+// TODO: can this be inferred?
 export const router: Router.Router<
   CreateProject | AddTask | CompleteTask | GetProjectWithTasks | GetAllProjects,
   ProjectRepository | DomainPublisher | TransactionalBoundary | TaskRepository
