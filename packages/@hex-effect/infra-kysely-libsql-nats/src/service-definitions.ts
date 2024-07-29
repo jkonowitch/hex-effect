@@ -1,5 +1,5 @@
 import { createClient, type Client, type Config, type LibsqlError } from '@libsql/client';
-import { Context, Effect, FiberRef, Layer, PubSub } from 'effect';
+import { Option, Context, Effect, FiberRef, Layer, PubSub } from 'effect';
 import {
   Kysely,
   type InsertResult,
@@ -7,7 +7,11 @@ import {
   type DeleteResult,
   type CompiledQuery,
   type QueryResult,
-  Transaction
+  Transaction,
+  SqliteAdapter,
+  DummyDriver,
+  SqliteIntrospector,
+  SqliteQueryCompiler
 } from 'kysely';
 import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
 import { Schema } from '@effect/schema';
@@ -30,6 +34,94 @@ export type EventStoreService = {
   markPublished: (ids: string[]) => Effect.Effect<void, LibsqlError>;
   save: (event: Schema.Schema.Encoded<typeof EventBaseSchema>) => Effect.Effect<void, LibsqlError>;
 };
+
+export class EventStore extends Context.Tag('EventStore')<EventStore, EventStoreService>() {
+  public static live = Layer.effect(
+    EventStore,
+    Effect.gen(function* () {
+      if (!(yield* hasEventsTable)) yield* Effect.dieMessage('No events table!');
+      const session = yield* DatabaseSession;
+      const service: EventStoreService = {
+        getUnpublished: () =>
+          Effect.gen(function* () {
+            const { read } = yield* FiberRef.get(session);
+
+            return yield* read(
+              EventStore.queryBuilder
+                .selectFrom('events')
+                .select(({ fn, val }) => [
+                  'payload',
+                  'id',
+                  fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
+                  fn<string>('json_extract', ['payload', val('$._context')]).as('context')
+                ])
+                .where('delivered', '=', 0)
+                .compile()
+            ).pipe(Effect.map((r) => r.rows));
+          }),
+        markPublished: (ids: string[]) =>
+          Effect.gen(function* () {
+            const { write } = yield* FiberRef.get(session);
+            yield* write(
+              EventStore.queryBuilder
+                .updateTable('events')
+                .set({ delivered: 1 })
+                .where('id', 'in', ids)
+                .compile()
+            );
+          }),
+        save: (encoded) =>
+          Effect.gen(function* () {
+            const { write } = yield* FiberRef.get(session);
+
+            yield* write(
+              EventStore.queryBuilder
+                .insertInto('events')
+                .values({
+                  occurredOn: encoded.occurredOn,
+                  id: encoded.messageId,
+                  delivered: 0,
+                  payload: JSON.stringify(encoded)
+                })
+                .compile()
+            );
+          })
+      };
+
+      return service;
+    })
+  );
+
+  private static queryBuilder = new Kysely<{
+    events: {
+      delivered: number;
+      id: string;
+      occurredOn: string;
+      payload: string;
+    };
+  }>({
+    dialect: {
+      createAdapter: () => new SqliteAdapter(),
+      createDriver: () => new DummyDriver(),
+      createIntrospector: (db) => new SqliteIntrospector(db),
+      createQueryCompiler: () => new SqliteQueryCompiler()
+    }
+  });
+}
+
+const hasEventsTable = Effect.gen(function* () {
+  const { db } = yield* DatabaseConnection;
+  const tables = yield* Effect.promise(() => db.introspection.getTables());
+  const maybeEventTable = Option.fromNullable(tables.find((t) => t.name === 'events'));
+  if (Option.isNone(maybeEventTable)) {
+    return false;
+  } else {
+    // TODO: ensure table has correct columns/types
+    // const eventTable = maybeEventTable.value;
+    // eventTable.columns.
+    return true;
+  }
+});
 
 export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
   ApplicationNamespace: Schema.String,
