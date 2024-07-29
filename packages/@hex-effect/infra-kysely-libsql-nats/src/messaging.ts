@@ -6,8 +6,9 @@ import { constTrue } from 'effect/Function';
 import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
 import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
 import {
+  EventStore,
+  NatsService,
   TransactionEvents,
-  type EventStoreService,
   type INatsService,
   type StoredEvent
 } from './service-definitions.js';
@@ -17,8 +18,6 @@ class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
     return e instanceof RawNatsError;
   }
 }
-
-// const publishingPipeline = makePublishingPipeline(eventStore, natsService);
 
 const EventPublishingDaemon = Layer.scopedDiscard(
   Effect.gen(function* () {
@@ -43,27 +42,28 @@ const callNats = <T>(operation: Promise<T>) =>
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-const makePublishingPipeline = (eventStore: EventStoreService, natsService: INatsService) => {
-  const publishEvent = (event: StoredEvent) =>
-    callNats(
-      natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
-        msgID: event.id,
-        timeout: 1000
-      })
-    );
+const publishingPipeline = Effect.zip(EventStore, NatsService).pipe(
+  Effect.flatMap(([eventStore, natsService]) => {
+    const publishEvent = (event: StoredEvent) =>
+      callNats(
+        natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
+          msgID: event.id,
+          timeout: 1000
+        })
+      );
 
-  return eventStore
-    .getUnpublished()
-    .pipe(
-      Effect.andThen((events) =>
-        Effect.zip(
-          Effect.forEach(events, publishEvent),
-          eventStore.markPublished(events.map((e) => e.id))
+    return eventStore
+      .getUnpublished()
+      .pipe(
+        Effect.andThen((events) =>
+          Effect.zip(
+            Effect.forEach(events, publishEvent),
+            eventStore.markPublished(events.map((e) => e.id))
+          )
         )
-      )
-    )
-    .pipe(Effect.catchAll((e) => Effect.logError(e)));
-};
+      );
+  })
+);
 
 export const makeEventHandlerService = <Tag>(
   natsService: INatsService,
