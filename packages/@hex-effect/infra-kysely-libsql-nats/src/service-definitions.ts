@@ -154,7 +154,7 @@ export type INatsService = {
 
 export class NatsService extends Context.Tag('NatsService')<NatsService, INatsService>() {
   public static live = (connectionOptions?: ConnectionOptions) =>
-    Layer.effect(
+    Layer.scoped(
       NatsService,
       Effect.gen(function* () {
         const connection = yield* Effect.promise(() => connect(connectionOptions));

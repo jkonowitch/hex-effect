@@ -10,15 +10,28 @@ export {
 import {
   DatabaseConnection,
   DatabaseSession,
+  EventStore,
+  NatsService,
   TransactionEvents
 } from './src/service-definitions.js';
-import { Layer } from 'effect';
+import { Context, Layer } from 'effect';
 import { TransactionalBoundary } from './src/transaction-boundary.js';
+import { EventPublishingDaemon } from './src/messaging.js';
 
 const WithoutDependencies = TransactionalBoundary.live.pipe(
-  Layer.provide(TransactionEvents.live),
+  Layer.provideMerge(EventStore.live),
+  Layer.provideMerge(TransactionEvents.live),
   Layer.provideMerge(DatabaseSession.live),
-  Layer.provide(DatabaseConnection.live({ url: 'http://localhost:8080' }))
+  Layer.provideMerge(DatabaseConnection.live({ url: 'http://localhost:8080' }))
 );
 
-export { TransactionalBoundary, WithoutDependencies, DatabaseSession };
+const shmee = EventPublishingDaemon.pipe(
+  Layer.provideMerge(WithoutDependencies),
+  Layer.provide(NatsService.live())
+);
+
+const z = Layer.context<Context.Tag.Identifier<DatabaseSession | TransactionalBoundary>>().pipe(
+  Layer.provide(shmee)
+);
+
+export { TransactionalBoundary, z as WithoutDependencies, DatabaseSession };

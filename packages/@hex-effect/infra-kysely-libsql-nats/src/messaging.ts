@@ -19,7 +19,7 @@ class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   }
 }
 
-const EventPublishingDaemon = Layer.scopedDiscard(
+export const EventPublishingDaemon = Layer.scopedDiscard(
   Effect.gen(function* () {
     const pub = yield* TransactionEvents;
     const dequeue = yield* PubSub.subscribe(pub);
