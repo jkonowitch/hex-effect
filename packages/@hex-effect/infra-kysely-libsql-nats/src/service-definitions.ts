@@ -1,5 +1,10 @@
-import { createClient, type Client, type Config, type LibsqlError } from '@libsql/client';
-import { Option, Context, Effect, FiberRef, Layer, PubSub } from 'effect';
+import {
+  createClient,
+  type Client,
+  type LibsqlError,
+  type Config as LibsqlConfig
+} from '@libsql/client';
+import { Option, Context, Effect, FiberRef, Layer, PubSub, Config } from 'effect';
 import {
   Kysely,
   type InsertResult,
@@ -13,7 +18,14 @@ import {
   SqliteIntrospector,
   SqliteQueryCompiler
 } from 'kysely';
-import type { JetStreamClient, JetStreamManager, StreamInfo } from 'nats';
+import {
+  connect,
+  RetentionPolicy,
+  type ConnectionOptions,
+  type JetStreamClient,
+  type JetStreamManager,
+  type StreamInfo
+} from 'nats';
 import { Schema } from '@effect/schema';
 import type { EventBaseSchema, TransactionalBoundary } from '@hex-effect/core';
 import { LibsqlDialect } from './libsql-dialect.js';
@@ -39,7 +51,7 @@ export class EventStore extends Context.Tag('EventStore')<EventStore, EventStore
   public static live = Layer.effect(
     EventStore,
     Effect.gen(function* () {
-      if (!(yield* hasEventsTable)) yield* Effect.dieMessage('No events table!');
+      if (!(yield* EventStore.hasEventsTable)) yield* Effect.dieMessage('No events table!');
       const session = yield* DatabaseSession;
       const service: EventStoreService = {
         getUnpublished: () =>
@@ -107,21 +119,21 @@ export class EventStore extends Context.Tag('EventStore')<EventStore, EventStore
       createQueryCompiler: () => new SqliteQueryCompiler()
     }
   });
-}
 
-const hasEventsTable = Effect.gen(function* () {
-  const { db } = yield* DatabaseConnection;
-  const tables = yield* Effect.promise(() => db.introspection.getTables());
-  const maybeEventTable = Option.fromNullable(tables.find((t) => t.name === 'events'));
-  if (Option.isNone(maybeEventTable)) {
-    return false;
-  } else {
-    // TODO: ensure table has correct columns/types
-    // const eventTable = maybeEventTable.value;
-    // eventTable.columns.
-    return true;
-  }
-});
+  private static hasEventsTable = Effect.gen(function* () {
+    const { db } = yield* DatabaseConnection;
+    const tables = yield* Effect.promise(() => db.introspection.getTables());
+    const maybeEventTable = Option.fromNullable(tables.find((t) => t.name === 'events'));
+    if (Option.isNone(maybeEventTable)) {
+      return false;
+    } else {
+      // TODO: ensure table has correct columns/types
+      // const eventTable = maybeEventTable.value;
+      // eventTable.columns.
+      return true;
+    }
+  });
+}
 
 export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
   ApplicationNamespace: Schema.String,
@@ -133,12 +145,49 @@ export class NatsSubject extends Schema.Class<NatsSubject>('NatsSubject')({
   }
 }
 
-export type NatsService = {
+export type INatsService = {
   jetstream: JetStreamClient;
   jetstreamManager: JetStreamManager;
   streamInfo: StreamInfo;
   eventToSubject: (event: Pick<StoredEvent, 'context' | 'tag'>) => NatsSubject;
 };
+
+export class NatsService extends Context.Tag('NatsService')<NatsService, INatsService>() {
+  public static live = (connectionOptions?: ConnectionOptions) =>
+    Layer.effect(
+      NatsService,
+      Effect.gen(function* () {
+        const connection = yield* Effect.promise(() => connect(connectionOptions));
+        const jetstreamManager = yield* Effect.promise(() => connection.jetstreamManager());
+        const applicationName = yield* Config.string('APPLICATION_NAME');
+        const streamInfo = yield* Effect.promise(() =>
+          jetstreamManager.streams.add({
+            name: applicationName,
+            subjects: [`${applicationName}.>`],
+            retention: RetentionPolicy.Interest
+          })
+        );
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(() => connection.drain()).pipe(
+            Effect.tap(Effect.logDebug('Nats connection closed'))
+          )
+        );
+        const service: INatsService = {
+          jetstream: connection.jetstream(),
+          streamInfo: streamInfo,
+          jetstreamManager,
+          eventToSubject: (event) => {
+            return NatsSubject.make({
+              ApplicationNamespace: applicationName,
+              BoundedContext: event.context,
+              EventTag: event.tag
+            });
+          }
+        };
+        return service;
+      })
+    );
+}
 
 type ExcludedTypes = [InsertResult, UpdateResult, DeleteResult];
 
@@ -156,7 +205,7 @@ export class DatabaseConnection extends Context.Tag('DatabaseConnection')<
     client: Client;
   }
 >() {
-  public static live = (config: Config) =>
+  public static live = (config: LibsqlConfig) =>
     Layer.scoped(
       DatabaseConnection,
       Effect.gen(function* () {

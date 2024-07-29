@@ -3,7 +3,7 @@ export { withTransactionalBoundary } from './src/transaction-boundary.js';
 export { makeEventHandlerService } from './src/messaging.js';
 export {
   type EventStoreService,
-  type NatsService,
+  type INatsService as NatsService,
   NatsSubject
 } from './src/service-definitions.js';
 

@@ -8,7 +8,7 @@ import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
 import {
   TransactionEvents,
   type EventStoreService,
-  type NatsService,
+  type INatsService,
   type StoredEvent
 } from './service-definitions.js';
 
@@ -43,7 +43,7 @@ const callNats = <T>(operation: Promise<T>) =>
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
+const makePublishingPipeline = (eventStore: EventStoreService, natsService: INatsService) => {
   const publishEvent = (event: StoredEvent) =>
     callNats(
       natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
@@ -66,7 +66,7 @@ const makePublishingPipeline = (eventStore: EventStoreService, natsService: Nats
 };
 
 export const makeEventHandlerService = <Tag>(
-  natsService: NatsService,
+  natsService: INatsService,
   tag: Context.Tag<Tag, EventHandlerService>
 ) => {
   const live: EventHandlerService = {
@@ -88,7 +88,7 @@ export const makeEventHandlerService = <Tag>(
 
 const streamEventsToHandler = <A, E, R>(
   consumerInfo: ConsumerInfo,
-  natsService: NatsService,
+  natsService: INatsService,
   handler: (payload: string) => Effect.Effect<A, E, R>
 ) =>
   Effect.gen(function* () {
@@ -122,7 +122,7 @@ const streamEventsToHandler = <A, E, R>(
   }).pipe(Effect.catchAll(Effect.logError), Effect.scoped);
 
 const upsertConsumer = (
-  natsService: NatsService,
+  natsService: INatsService,
   $durableName: string,
   triggers: { context: string; tag: string }[]
 ) =>
