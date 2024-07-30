@@ -11,10 +11,10 @@ import {
   TaskRepository,
   TaskId
 } from '@projects/domain';
-import { Layer, Effect, FiberRef, Option, Context } from 'effect';
+import { Layer, Effect, FiberRef, Option } from 'effect';
 import { omit } from 'effect/Struct';
 import { nanoid } from 'nanoid';
-import { DatabaseSession, type EventStoreService } from '@hex-effect/infra-kysely-libsql-nats';
+import { DatabaseSession } from '@hex-effect/infra-kysely-libsql-nats';
 import {
   DummyDriver,
   Kysely,
@@ -162,63 +162,5 @@ const TaskRepositoryLive = Layer.effect(
     }))
   )
 );
-
-export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, EventStoreService>() {
-  public static live = Layer.effect(
-    EventStore,
-    DatabaseSession.pipe(
-      Effect.map((session) => {
-        const service: EventStoreService = {
-          getUnpublished: () =>
-            Effect.gen(function* () {
-              const { read } = yield* FiberRef.get(session);
-
-              return yield* read(
-                queryBuilder
-                  .selectFrom('events')
-                  .select(({ fn, val }) => [
-                    'payload',
-                    'id',
-                    fn<string>('json_extract', ['payload', val('$._tag')]).as('tag'),
-                    fn<string>('json_extract', ['payload', val('$._context')]).as('context')
-                  ])
-                  .where('delivered', '=', 0)
-                  .compile()
-              ).pipe(Effect.map((r) => r.rows));
-            }),
-          markPublished: (ids: string[]) =>
-            Effect.gen(function* () {
-              const { write } = yield* FiberRef.get(session);
-              yield* write(
-                queryBuilder
-                  .updateTable('events')
-                  .set({ delivered: 1 })
-                  .where('id', 'in', ids)
-                  .compile()
-              );
-            }),
-          save: (encoded) =>
-            Effect.gen(function* () {
-              const { write } = yield* FiberRef.get(session);
-
-              yield* write(
-                queryBuilder
-                  .insertInto('events')
-                  .values({
-                    occurredOn: encoded.occurredOn,
-                    id: encoded.messageId,
-                    delivered: 0,
-                    payload: JSON.stringify(encoded)
-                  })
-                  .compile()
-              );
-            })
-        };
-
-        return service;
-      })
-    )
-  );
-}
 
 export const DomainServiceLive = Layer.mergeAll(TaskRepositoryLive, ProjectRepositoryLive);

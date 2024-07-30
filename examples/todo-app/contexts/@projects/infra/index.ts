@@ -2,7 +2,7 @@ import { Effect, Layer, Logger, LogLevel, ManagedRuntime } from 'effect';
 import { registerEvents, EventHandlerService } from '@projects/application';
 import { makeEventHandlerService, WithoutDependencies } from '@hex-effect/infra-kysely-libsql-nats';
 import { NatsService } from './services.js';
-import { DomainServiceLive, EventStore } from './repositories.js';
+import { DomainServiceLive } from './repositories.js';
 
 const EventHandlerLive = NatsService.pipe(
   Effect.andThen((nats) => makeEventHandlerService(nats, EventHandlerService))
@@ -15,7 +15,6 @@ const EventDaemonLive = Layer.effectDiscard(
 const InfrastructureLive = EventDaemonLive.pipe(
   Layer.provideMerge(EventHandlerLive),
   Layer.provide(NatsService.live),
-  Layer.provideMerge(EventStore.live),
   Layer.provideMerge(WithoutDependencies)
 );
 
