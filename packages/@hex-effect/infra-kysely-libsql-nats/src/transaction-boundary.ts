@@ -100,8 +100,7 @@ const storeDomainEvents = Effect.gen(function* () {
   const pub = yield* DomainEventPublisher;
   // const store = yield* EventStore;
   const dequeue = yield* PubSub.subscribe(pub);
-
-  yield* Queue.take(dequeue).pipe(Effect.andThen(Effect.log), Effect.forever);
+  yield* Queue.take(dequeue).pipe(Effect.andThen((e) => Effect.log(e)));
 });
 
 export function withTransactionalBoundary(mode: Modes = 'Batched') {
@@ -116,9 +115,12 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;
         yield* tx.begin(mode);
-        const eventStoreProcess = yield* storeDomainEvents.pipe(Effect.fork);
+
+        yield* storeDomainEvents.pipe(Effect.forkScoped);
+        // ensure the storeDomainEvents effect starts listening
+        yield* Effect.yieldNow();
+
         const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
-        yield* Fiber.interrupt(eventStoreProcess);
         yield* tx.commit();
         return result;
       }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
