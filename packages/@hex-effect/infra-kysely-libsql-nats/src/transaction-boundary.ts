@@ -12,7 +12,10 @@ import {
   Scope,
   Fiber
 } from 'effect';
-import type { TransactionalBoundary as ITransactionalBoundary } from '@hex-effect/core';
+import {
+  DomainEventPublisher,
+  type TransactionalBoundary as ITransactionalBoundary
+} from '@hex-effect/core';
 import { type InValue } from '@libsql/client';
 import { DatabaseConnection, DatabaseSession, TransactionEvents } from './service-definitions.js';
 
@@ -92,11 +95,14 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
     })
   );
 }
-
 export function withTransactionalBoundary(mode: Modes = 'Batched') {
   return <A, E, R>(
     eff: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, Context.Tag.Identifier<TransactionalBoundary> | Exclude<R, Scope.Scope>> =>
+  ): Effect.Effect<
+    A,
+    E,
+    TransactionalBoundary | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
+  > =>
     Effect.gen(function* () {
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;
@@ -104,7 +110,7 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
         const result = yield* eff.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();
         return result;
-      }).pipe(Effect.scoped, Effect.fork);
+      }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
 
       const exit = yield* Fiber.await(fiber);
       return yield* exit;

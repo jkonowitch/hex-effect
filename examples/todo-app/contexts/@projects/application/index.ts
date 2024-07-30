@@ -1,13 +1,7 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import type {
-  DomainEventPublisher,
-  EventHandlerService as IEventHandlerService
-} from '@hex-effect/core';
-import {
-  TransactionalBoundary,
-  withTransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql-nats';
+import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
+import { withTransactionalBoundary } from '@hex-effect/infra-kysely-libsql-nats';
 import {
   Project,
   TaskCompletedEvent,
@@ -103,7 +97,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
       Effect.flatMap(Task.complete)
     );
     yield* repo.save(task);
-  }) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -118,11 +112,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
 const getAllProjects = () =>
   Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
-// TODO: can this be inferred?
-export const router: Router.Router<
-  CreateProject | AddTask | CompleteTask | GetProjectWithTasks | GetAllProjects,
-  ProjectRepository | DomainEventPublisher | TransactionalBoundary | TaskRepository
-> = Router.make(
+export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),
