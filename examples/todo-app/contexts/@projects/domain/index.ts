@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { type DomainEventPublisher, EventBaseSchema } from '@hex-effect/core';
+import { DomainEventPublisher, EventBaseSchema } from '@hex-effect/core';
 import { Context, Effect } from 'effect';
 import type { Option } from 'effect/Option';
 
@@ -15,13 +15,13 @@ export class Project extends Schema.TaggedClass<Project>()('Project', {
 }) {
   public static create(
     title: string
-  ): Effect.Effect<Project, never, ProjectRepository | DomainPublisher> {
+  ): Effect.Effect<Project, never, ProjectRepository | DomainEventPublisher> {
     return Effect.gen(function* () {
       const project = new Project({
         id: yield* Effect.serviceFunctions(ProjectRepository).nextId(),
         title
       });
-      yield* Effect.serviceFunctions(DomainPublisher).publish(
+      yield* Effect.serviceFunctions(DomainEventPublisher).publish(
         ProjectCreatedEvent.make({ projectId: project.id })
       );
       return project;
@@ -55,10 +55,10 @@ export class Task extends Schema.TaggedClass<Task>()('Task', {
     });
   }
 
-  public static complete(self: Task): Effect.Effect<Task, never, DomainPublisher> {
+  public static complete(self: Task): Effect.Effect<Task, never, DomainEventPublisher> {
     return Effect.gen(function* () {
       const task = new Task({ ...self, completed: true });
-      yield* Effect.serviceFunctions(DomainPublisher).publish(
+      yield* Effect.serviceFunctions(DomainEventPublisher).publish(
         TaskCompletedEvent.make({ taskId: task.id })
       );
       return task;
@@ -109,8 +109,3 @@ export class TaskRepository extends Context.Tag('TaskRepository')<
 >() {}
 
 export const ProjectDomainEvents = Schema.Union(ProjectCreatedEvent, TaskCompletedEvent);
-
-export class DomainPublisher extends Context.Tag('ProjectDomainPublisher')<
-  DomainPublisher,
-  DomainEventPublisher<(typeof ProjectDomainEvents)['Type']>
->() {}

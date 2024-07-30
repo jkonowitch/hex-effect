@@ -1,6 +1,9 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
+import type {
+  DomainEventPublisher,
+  EventHandlerService as IEventHandlerService
+} from '@hex-effect/core';
 import {
   TransactionalBoundary,
   withTransactionalBoundary
@@ -13,8 +16,7 @@ import {
   Task,
   TaskId,
   TaskRepository,
-  ProjectDomainEvents,
-  DomainPublisher
+  ProjectDomainEvents
 } from '@projects/domain';
 import { Effect, type Request, Option, pipe, Context, Match } from 'effect';
 import { get } from 'effect/Struct';
@@ -119,7 +121,7 @@ const getAllProjects = () =>
 // TODO: can this be inferred?
 export const router: Router.Router<
   CreateProject | AddTask | CompleteTask | GetProjectWithTasks | GetAllProjects,
-  ProjectRepository | DomainPublisher | TransactionalBoundary | TaskRepository
+  ProjectRepository | DomainEventPublisher | TransactionalBoundary | TaskRepository
 > = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),

@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import { Effect, Scope } from 'effect';
+import { Context, Effect, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 /**
@@ -22,9 +22,15 @@ type EventBaseType = typeof EventBaseSchema.Type & { _tag: string };
 /**
  * Abstract service, defined in the `domain` layer, that allows publishing of arbitrary domain events
  */
-export type DomainEventPublisher<EventType extends EventBaseType> = {
-  publish(event: EventType): Effect.Effect<void>;
-};
+export class DomainEventPublisher extends Context.Tag('DomainEventPublisher')<
+  DomainEventPublisher,
+  PubSub.PubSub<EventBaseType>
+>() {
+  public static live = Effect.provideServiceEffect(
+    DomainEventPublisher,
+    PubSub.unbounded<EventBaseType>()
+  );
+}
 
 /**
  * Service which allows an `application` to connect a Domain Event with a handler
