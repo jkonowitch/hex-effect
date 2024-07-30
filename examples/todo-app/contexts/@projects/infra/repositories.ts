@@ -9,9 +9,7 @@ import {
   Project,
   Task,
   TaskRepository,
-  TaskId,
-  DomainPublisher,
-  ProjectDomainEvents
+  TaskId
 } from '@projects/domain';
 import { Layer, Effect, FiberRef, Option, Context } from 'effect';
 import { omit } from 'effect/Struct';
@@ -165,20 +163,6 @@ const TaskRepositoryLive = Layer.effect(
   )
 );
 
-const DomainPublisherLive = Layer.effect(
-  DomainPublisher,
-  Effect.gen(function* () {
-    const eventStore = yield* EventStore;
-
-    return {
-      publish(event) {
-        const encoded = Schema.encodeSync(ProjectDomainEvents)(event);
-        return eventStore.save(encoded).pipe(Effect.orDie);
-      }
-    };
-  })
-);
-
 export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, EventStoreService>() {
   public static live = Layer.effect(
     EventStore,
@@ -237,8 +221,4 @@ export class EventStore extends Context.Tag('ProjectEventStore')<EventStore, Eve
   );
 }
 
-export const DomainServiceLive = Layer.mergeAll(
-  TaskRepositoryLive,
-  ProjectRepositoryLive,
-  DomainPublisherLive
-);
+export const DomainServiceLive = Layer.mergeAll(TaskRepositoryLive, ProjectRepositoryLive);
