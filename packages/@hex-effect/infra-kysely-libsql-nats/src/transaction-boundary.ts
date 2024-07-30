@@ -10,7 +10,8 @@ import {
   Context,
   Layer,
   Scope,
-  Fiber
+  Fiber,
+  Queue
 } from 'effect';
 import {
   DomainEventPublisher,
@@ -95,9 +96,17 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
     })
   );
 }
+const storeDomainEvents = Effect.gen(function* () {
+  const pub = yield* DomainEventPublisher;
+  // const store = yield* EventStore;
+  const dequeue = yield* PubSub.subscribe(pub);
+
+  yield* Queue.take(dequeue).pipe(Effect.andThen(Effect.log), Effect.forever);
+});
+
 export function withTransactionalBoundary(mode: Modes = 'Batched') {
   return <A, E, R>(
-    eff: Effect.Effect<A, E, R>
+    useCase: Effect.Effect<A, E, R>
   ): Effect.Effect<
     A,
     E,
@@ -107,7 +116,9 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;
         yield* tx.begin(mode);
-        const result = yield* eff.pipe(Effect.tapError(tx.rollback));
+        const eventStoreProcess = yield* storeDomainEvents.pipe(Effect.fork);
+        const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
+        yield* Fiber.interrupt(eventStoreProcess);
         yield* tx.commit();
         return result;
       }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
