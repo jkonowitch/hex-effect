@@ -1,4 +1,5 @@
 import { Schema } from '@effect/schema';
+import type { symbol } from '@effect/schema/Serializable';
 import { Context, Effect, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
@@ -17,7 +18,10 @@ export const EventBaseSchema = Schema.Struct({
   )
 });
 
-type EventBaseType = typeof EventBaseSchema.Type & { _tag: string };
+type EventBaseType = typeof EventBaseSchema.Type & { _tag: string } & {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly [symbol]: Schema.Schema<any, any, never>;
+};
 
 /**
  * Abstract service, defined in the `domain` layer, that allows publishing of arbitrary domain events

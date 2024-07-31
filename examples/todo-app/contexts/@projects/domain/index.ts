@@ -1,4 +1,4 @@
-import { Schema } from '@effect/schema';
+import { Schema, Serializable } from '@effect/schema';
 import { DomainEventPublisher, EventBaseSchema } from '@hex-effect/core';
 import { Context, Effect } from 'effect';
 import type { Option } from 'effect/Option';
@@ -74,15 +74,29 @@ const ProjectEventBase = Schema.Struct({
   )
 });
 
-export const ProjectCreatedEvent = Schema.TaggedStruct('ProjectCreatedEvent', {
-  ...ProjectEventBase.fields,
-  projectId: ProjectId
-});
+export class ProjectCreatedEvent extends Schema.TaggedClass<ProjectCreatedEvent>()(
+  'ProjectCreatedEvent',
+  {
+    ...ProjectEventBase.fields,
+    projectId: ProjectId
+  }
+) {
+  get [Serializable.symbol]() {
+    return ProjectCreatedEvent;
+  }
+}
 
-export const TaskCompletedEvent = Schema.TaggedStruct('TaskCompletedEvent', {
-  ...ProjectEventBase.fields,
-  taskId: TaskId
-});
+export class TaskCompletedEvent extends Schema.TaggedClass<TaskCompletedEvent>()(
+  'TaskCompletedEvent',
+  {
+    ...ProjectEventBase.fields,
+    taskId: TaskId
+  }
+) {
+  get [Serializable.symbol]() {
+    return TaskCompletedEvent;
+  }
+}
 
 /**
  * Services

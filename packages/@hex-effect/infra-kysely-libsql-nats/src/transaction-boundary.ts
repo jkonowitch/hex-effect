@@ -18,7 +18,13 @@ import {
   type TransactionalBoundary as ITransactionalBoundary
 } from '@hex-effect/core';
 import { type InValue } from '@libsql/client';
-import { DatabaseConnection, DatabaseSession, TransactionEvents } from './service-definitions.js';
+import {
+  DatabaseConnection,
+  DatabaseSession,
+  EventStore,
+  TransactionEvents
+} from './service-definitions.js';
+import { Serializable } from '@effect/schema';
 
 type LibsqlTransactionalBoundary = ITransactionalBoundary<Modes>;
 
@@ -98,9 +104,14 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
 }
 const storeDomainEvents = Effect.gen(function* () {
   const pub = yield* DomainEventPublisher;
-  // const store = yield* EventStore;
+  const store = yield* EventStore;
   const dequeue = yield* PubSub.subscribe(pub);
-  yield* Queue.take(dequeue).pipe(Effect.andThen((e) => Effect.log(e)));
+  yield* Queue.take(dequeue)
+    .pipe(
+      Effect.flatMap((e) => Serializable.serialize(e)),
+      Effect.andThen((e) => store.save(e))
+    )
+    .pipe(Effect.forever);
 });
 
 export function withTransactionalBoundary(mode: Modes = 'Batched') {
@@ -109,17 +120,15 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
   ): Effect.Effect<
     A,
     E,
-    TransactionalBoundary | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
+    TransactionalBoundary | EventStore | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
   > =>
     Effect.gen(function* () {
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;
         yield* tx.begin(mode);
-
         yield* storeDomainEvents.pipe(Effect.forkScoped);
         // ensure the storeDomainEvents effect starts listening
         yield* Effect.yieldNow();
-
         const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();
         return result;

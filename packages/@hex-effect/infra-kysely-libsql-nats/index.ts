@@ -2,7 +2,7 @@ export { LibsqlDialect } from './src/libsql-dialect.js';
 export { withTransactionalBoundary } from './src/transaction-boundary.js';
 export { makeEventHandlerService } from './src/messaging.js';
 export {
-  type EventStoreService,
+  EventStore,
   type INatsService as NatsService,
   NatsSubject
 } from './src/service-definitions.js';
@@ -30,8 +30,8 @@ const shmee = EventPublishingDaemon.pipe(
   Layer.provide(NatsService.live())
 );
 
-const z = Layer.context<Context.Tag.Identifier<DatabaseSession | TransactionalBoundary>>().pipe(
-  Layer.provide(shmee)
-);
+const z = Layer.context<
+  Context.Tag.Identifier<DatabaseSession | TransactionalBoundary | EventStore>
+>().pipe(Layer.provide(shmee));
 
 export { TransactionalBoundary, z as WithoutDependencies, DatabaseSession };
