@@ -1,11 +1,10 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
 import {
-  EventStore,
-  TransactionalBoundary,
+  type EventHandlerService as IEventHandlerService,
+  IsolationLevel,
   withTransactionalBoundary
-} from '@hex-effect/infra-kysely-libsql-nats';
+} from '@hex-effect/core';
 import {
   Project,
   TaskCompletedEvent,
@@ -80,7 +79,9 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CreateProject>;
+  }).pipe(
+    withTransactionalBoundary(IsolationLevel.Batched)
+  ) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   pipe(
@@ -89,7 +90,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     Effect.flatMap((project) => project.addTask(description)),
     Effect.tap(Effect.serviceFunctions(TaskRepository).save),
     Effect.map(get('id')),
-    withTransactionalBoundary()
+    withTransactionalBoundary(IsolationLevel.Batched)
   ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
@@ -101,7 +102,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
       Effect.flatMap(Task.complete)
     );
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary(IsolationLevel.Batched)) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -116,10 +117,7 @@ const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
 const getAllProjects = () =>
   Effect.serviceFunctions(ProjectRepository).findAll() satisfies RequestHandler<GetAllProjects>;
 
-export const router: Router.Router<
-  CreateProject | AddTask | CompleteTask | GetProjectWithTasks | GetAllProjects,
-  ProjectRepository | TransactionalBoundary | EventStore | TaskRepository
-> = Router.make(
+export const router = Router.make(
   Rpc.effect(CreateProject, createProject),
   Rpc.effect(AddTask, addTask),
   Rpc.effect(CompleteTask, completeTask),

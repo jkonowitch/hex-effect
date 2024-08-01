@@ -1,6 +1,6 @@
 import { Schema } from '@effect/schema';
 import type { symbol } from '@effect/schema/Serializable';
-import { Context, Effect, PubSub, Scope } from 'effect';
+import { Context, Effect, Fiber, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 /**
@@ -52,13 +52,48 @@ export type EventHandlerService = {
   ): Effect.Effect<void, never, Req>;
 };
 
+export enum IsolationLevel {
+  ReadCommitted = 'ReadCommitted',
+  RepeatableReads = 'RepeatableReads',
+  Serializable = 'Serializable',
+  /** A non-standard isolation level, supported by libsql and d1. No read-your-writes semantics within a transaction as all writes are committed at once at the end of a tx. */
+  Batched = 'Batched'
+}
+
 /**
  * Service which controls the opening and closing of a "transaction"
  * Abstracted from a particular infrastructure.
- * `Modes` are like isolation levels - generically defined and implemented by an infra-specific adapter
+ * Isolation Levels are implemented by an infra-specific adapter
  */
-export type TransactionalBoundary<Modes> = {
-  begin(mode: Modes): Effect.Effect<void, never, Scope.Scope>;
-  commit(): Effect.Effect<void, never>;
-  rollback(): Effect.Effect<void>;
+export type ITransactionalBoundary = {
+  begin(mode: IsolationLevel): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
+  commit(): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
+  rollback(): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
 };
+
+export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
+  TransactionalBoundary,
+  ITransactionalBoundary
+>() {}
+
+export function withTransactionalBoundary(level: IsolationLevel) {
+  return <A, E, R>(
+    useCase: Effect.Effect<A, E, R>
+  ): Effect.Effect<
+    A,
+    E,
+    TransactionalBoundary | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
+  > =>
+    Effect.gen(function* () {
+      const fiber = yield* Effect.gen(function* () {
+        const tx = yield* TransactionalBoundary;
+        yield* tx.begin(level);
+        const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
+        yield* tx.commit();
+        return result;
+      }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
+
+      const exit = yield* Fiber.await(fiber);
+      return yield* exit;
+    });
+}
