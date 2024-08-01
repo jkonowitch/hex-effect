@@ -13,7 +13,6 @@ import { DatabaseConnection, DatabaseSession, TransactionEvents } from './servic
 export const shmee = Layer.effect(
   TransactionalBoundaryProvider,
   Effect.gen(function* () {
-    yield* Effect.log('sup');
     const { client, db } = yield* DatabaseConnection;
     const pub = yield* TransactionEvents;
     const session = yield* DatabaseSession;
@@ -21,7 +20,6 @@ export const shmee = Layer.effect(
     return {
       provide: Effect.gen(function* () {
         const ref = yield* Ref.make<TransactionSession>(None());
-        yield* Effect.log('kralf');
 
         const boundary: ITransactionalBoundary = {
           begin: (mode) =>
