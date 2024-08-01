@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@hex-effect/infra-kysely-libsql-nats": "workspace:*",
+    "@hex-effect/core": "workspace:*",
     "@libsql/client": "~0.7.0",
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",

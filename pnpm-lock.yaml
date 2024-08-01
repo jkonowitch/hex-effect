@@ -89,6 +89,9 @@ importers:
 
   examples/todo-app/contexts/@projects/infra:
     dependencies:
+      '@hex-effect/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/core
       '@hex-effect/infra-kysely-libsql-nats':
         specifier: workspace:*
         version: link:../../../../../packages/@hex-effect/infra-kysely-libsql-nats

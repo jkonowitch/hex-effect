@@ -71,9 +71,14 @@ export type ITransactionalBoundary = {
   rollback(): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
 };
 
-export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
+class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   TransactionalBoundary,
   ITransactionalBoundary
+>() {}
+
+export class TransactionalBoundaryProvider extends Context.Tag('TransactionalBoundaryProvider')<
+  TransactionalBoundaryProvider,
+  { provide: Effect.Effect<Context.Tag.Service<TransactionalBoundary>> }
 >() {}
 
 export function withTransactionalBoundary(level: IsolationLevel) {
@@ -82,16 +87,24 @@ export function withTransactionalBoundary(level: IsolationLevel) {
   ): Effect.Effect<
     A,
     E,
-    TransactionalBoundary | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
+    | TransactionalBoundaryProvider
+    | Exclude<Exclude<Exclude<R, DomainEventPublisher>, TransactionalBoundary>, Scope.Scope>
   > =>
     Effect.gen(function* () {
+      const boundary = yield* Effect.serviceConstants(TransactionalBoundaryProvider).provide;
+
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;
         yield* tx.begin(level);
         const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();
         return result;
-      }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
+      }).pipe(
+        DomainEventPublisher.live,
+        Effect.provideService(TransactionalBoundary, boundary),
+        Effect.scoped,
+        Effect.fork
+      );
 
       const exit = yield* Fiber.await(fiber);
       return yield* exit;
