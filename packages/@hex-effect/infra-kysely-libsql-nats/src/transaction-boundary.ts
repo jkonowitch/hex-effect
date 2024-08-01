@@ -115,21 +115,19 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
         const tx = yield* TransactionalBoundary;
 
         yield* tx.begin(mode);
-        // const store = yield* EventStore;
 
+        const store = yield* EventStore;
         const pub = yield* DomainEventPublisher;
         const sub = yield* PubSub.subscribe(pub);
-        const stream = Stream.fromQueue(sub);
-        yield* stream.pipe(
-          Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(Effect.log))),
-          Stream.onDone(() => Effect.log('done streaming events')),
+        yield* Stream.fromQueue(sub).pipe(
+          Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(store.save))),
           Stream.runDrain,
-          Effect.forkDaemon
+          Effect.fork
         );
 
-        const res = yield* useCase.pipe(Effect.tapError(tx.rollback));
+        const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();
-        return res;
+        return result;
       }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
 
       const exit = yield* Fiber.await(fiber);
