@@ -11,7 +11,7 @@ import {
   Layer,
   Scope,
   Fiber,
-  Queue
+  Stream
 } from 'effect';
 import {
   DomainEventPublisher,
@@ -102,18 +102,6 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
     })
   );
 }
-const storeDomainEvents = Effect.gen(function* () {
-  const pub = yield* DomainEventPublisher;
-  const store = yield* EventStore;
-  const dequeue = yield* PubSub.subscribe(pub);
-  yield* Queue.take(dequeue)
-    .pipe(
-      Effect.flatMap((e) => Serializable.serialize(e)),
-      Effect.andThen((e) => store.save(e))
-    )
-    .pipe(Effect.forever);
-});
-
 export function withTransactionalBoundary(mode: Modes = 'Batched') {
   return <A, E, R>(
     useCase: Effect.Effect<A, E, R>
@@ -125,13 +113,23 @@ export function withTransactionalBoundary(mode: Modes = 'Batched') {
     Effect.gen(function* () {
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;
+
         yield* tx.begin(mode);
-        yield* storeDomainEvents.pipe(Effect.forkScoped);
-        // ensure the storeDomainEvents effect starts listening
-        yield* Effect.yieldNow();
-        const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
+        // const store = yield* EventStore;
+
+        const pub = yield* DomainEventPublisher;
+        const sub = yield* PubSub.subscribe(pub);
+        const stream = Stream.fromQueue(sub);
+        yield* stream.pipe(
+          Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(Effect.log))),
+          Stream.onDone(() => Effect.log('done streaming events')),
+          Stream.runDrain,
+          Effect.forkDaemon
+        );
+
+        const res = yield* useCase.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();
-        return result;
+        return res;
       }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
 
       const exit = yield* Fiber.await(fiber);
