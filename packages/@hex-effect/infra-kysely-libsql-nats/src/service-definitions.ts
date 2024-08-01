@@ -27,7 +27,7 @@ import {
   type StreamInfo
 } from 'nats';
 import { Schema } from '@effect/schema';
-import type { EventBaseSchema, TransactionalBoundary } from '@hex-effect/core';
+import type { EventBaseSchema, ITransactionalBoundary } from '@hex-effect/core';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 export type StoredEvent = {
@@ -261,10 +261,10 @@ export class DatabaseSession extends Context.Tag('DatabaseSession')<
 
 export class TransactionEvents extends Context.Tag('TransactionEvents')<
   TransactionEvents,
-  PubSub.PubSub<keyof TransactionalBoundary<unknown>>
+  PubSub.PubSub<keyof ITransactionalBoundary>
 >() {
   public static live = Layer.effect(
     TransactionEvents,
-    PubSub.sliding<keyof TransactionalBoundary<unknown>>(10)
+    PubSub.sliding<keyof ITransactionalBoundary>(10)
   );
 }

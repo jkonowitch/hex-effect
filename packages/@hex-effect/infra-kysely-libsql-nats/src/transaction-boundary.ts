@@ -1,141 +1,207 @@
 import { Kysely, Transaction, type CompiledQuery } from 'kysely';
+import { Effect, FiberRef, Data, Match, Layer, Ref } from 'effect';
 import {
-  Effect,
-  FiberRef,
-  Data,
-  Match,
-  PubSub,
-  Option,
-  pipe,
-  Context,
-  Layer,
-  Scope,
-  Fiber,
-  Stream
-} from 'effect';
-import {
-  DomainEventPublisher,
-  type TransactionalBoundary as ITransactionalBoundary
+  IsolationLevel,
+  TransactionalBoundaryProvider,
+  type ITransactionalBoundary
 } from '@hex-effect/core';
 import { type InValue } from '@libsql/client';
-import {
-  DatabaseConnection,
-  DatabaseSession,
-  EventStore,
-  TransactionEvents
-} from './service-definitions.js';
-import { Serializable } from '@effect/schema';
+import { DatabaseConnection, DatabaseSession, TransactionEvents } from './service-definitions.js';
 
-type LibsqlTransactionalBoundary = ITransactionalBoundary<Modes>;
+// type LibsqlTransactionalBoundary = ITransactionalBoundary<Modes>;
 
-export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
-  TransactionalBoundary,
-  LibsqlTransactionalBoundary
->() {
-  public static live = Layer.effect(
-    TransactionalBoundary,
-    Effect.gen(function* () {
-      const { client, db } = yield* DatabaseConnection;
-      let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
-      const pub = yield* TransactionEvents;
-      const session = yield* DatabaseSession;
-      const boundary: LibsqlTransactionalBoundary = {
-        begin: (mode) =>
-          Match.value(mode)
-            .pipe(
-              Match.when('Batched', () =>
+export const shmee = Layer.effect(
+  TransactionalBoundaryProvider,
+  Effect.gen(function* () {
+    yield* Effect.log('sup');
+    const { client, db } = yield* DatabaseConnection;
+    const pub = yield* TransactionEvents;
+    const session = yield* DatabaseSession;
+
+    return {
+      provide: Effect.gen(function* () {
+        const ref = yield* Ref.make<TransactionSession>(None());
+        yield* Effect.log('kralf');
+
+        const boundary: ITransactionalBoundary = {
+          begin: (mode) =>
+            Match.value(mode).pipe(
+              Match.when(IsolationLevel.Batched, () =>
                 Effect.gen(function* () {
-                  const ref = yield* FiberRef.make<TransactionSession>(Batched({ writes: [] }));
-                  maybeTransactionSession = Option.some(ref);
-                  yield* FiberRef.getAndUpdate(session, (current) => ({
+                  yield* Ref.set(ref, Batched({ writes: [] }));
+                  yield* FiberRef.update(session, (current) => ({
                     ...current,
                     write(op) {
-                      return FiberRef.update(ref, (a) =>
-                        $is('Batched')(a) ? { ...a, writes: [...a.writes, op] } : a
+                      return Ref.update(ref, (s) =>
+                        $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
                       );
                     }
                   }));
                 })
               ),
-              Match.when('Serialized', () =>
+              Match.when(IsolationLevel.Serializable, () =>
                 Effect.gen(function* () {
                   const tx = yield* initiateTransaction(db);
-                  const ref = yield* FiberRef.make<TransactionSession>(Serialized({ tx }));
-                  maybeTransactionSession = Option.some(ref);
+                  yield* Ref.set(ref, Serialized({ tx }));
                   yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
                 })
               ),
-              Match.exhaustive
+              Match.orElse(() => Effect.dieMessage('Unsupported mode'))
+            ),
+          commit: () =>
+            Ref.get(ref).pipe(
+              Effect.flatMap(
+                $match({
+                  Batched: ({ writes }) =>
+                    Effect.promise(() =>
+                      client.batch(
+                        writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
+                      )
+                    ),
+                  Serialized: () => Effect.log('to implement'),
+                  None: () => Effect.dieMessage('kralf')
+                })
+              )
+            ),
+          rollback: () =>
+            Ref.get(ref).pipe(
+              Effect.flatMap(
+                $match({
+                  Batched: () => Ref.set(ref, Batched({ writes: [] })),
+                  Serialized: ({ tx }) => tx.rollback,
+                  None: () => Effect.dieMessage('')
+                })
+              )
             )
-            .pipe(Effect.tap(() => PubSub.publish(pub, 'begin'))),
-        commit: () =>
-          // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-          FiberRef.get(Option.getOrThrow(maybeTransactionSession)).pipe(
-            Effect.flatMap(
-              $match({
-                Serialized: ({ tx }) => tx.commit,
-                Batched: ({ writes }) =>
-                  Effect.promise(() =>
-                    client.batch(
-                      writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
-                    )
-                  )
-              })
-            ),
-            Effect.tap(() => PubSub.publish(pub, 'commit'))
-          ),
-        rollback: () =>
-          pipe(
-            Option.getOrThrow(maybeTransactionSession),
-            (ref) => Effect.zip(FiberRef.get(ref), Effect.succeed(ref)),
-            Effect.flatMap(([transactionSession, ref]) =>
-              $match({
-                Serialized: ({ tx }) => tx.rollback,
-                Batched: (a) => FiberRef.set(ref, { ...a, writes: [] })
-              })(transactionSession)
-            ),
-            Effect.tap(() => PubSub.publish(pub, 'rollback'))
-          )
-      };
+        };
 
-      return boundary;
-    })
-  );
-}
-export function withTransactionalBoundary(mode: Modes = 'Batched') {
-  return <A, E, R>(
-    useCase: Effect.Effect<A, E, R>
-  ): Effect.Effect<
-    A,
-    E,
-    TransactionalBoundary | EventStore | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
-  > =>
-    Effect.gen(function* () {
-      const fiber = yield* Effect.gen(function* () {
-        const tx = yield* TransactionalBoundary;
+        return boundary;
+      })
+    };
+  })
+);
 
-        yield* tx.begin(mode);
+// export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
+//   TransactionalBoundary,
+//   LibsqlTransactionalBoundary
+// >() {
+//   public static live = Layer.effect(
+//     TransactionalBoundary,
+//     Effect.gen(function* () {
+//       const { client, db } = yield* DatabaseConnection;
+//       let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
+//       const pub = yield* TransactionEvents;
+//       const session = yield* DatabaseSession;
+//       const boundary: LibsqlTransactionalBoundary = {
+//         begin: (mode) =>
+//           Match.value(mode)
+//             .pipe(
+//               Match.when('Batched', () =>
+//                 Effect.gen(function* () {
+//                   const ref = yield* FiberRef.make<TransactionSession>(Batched({ writes: [] }));
+//                   maybeTransactionSession = Option.some(ref);
+//                   yield* FiberRef.getAndUpdate(session, (current) => ({
+//                     ...current,
+//                     write(op) {
+//                       return FiberRef.update(ref, (a) => {
+//                         if ($is('Batched')(a)) {
+//                           a.writes.push(op);
+//                         }
+//                         return a;
+//                       });
+//                     }
+//                   }));
+//                 })
+//               ),
+//               Match.when('Serialized', () =>
+//                 Effect.gen(function* () {
+//                   const tx = yield* initiateTransaction(db);
+//                   const ref = yield* FiberRef.make<TransactionSession>(Serialized({ tx }));
+//                   maybeTransactionSession = Option.some(ref);
+//                   yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
+//                 })
+//               ),
+//               Match.exhaustive
+//             )
+//             .pipe(Effect.tap(() => PubSub.publish(pub, 'begin'))),
+//         commit: () =>
+//           // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
+//           FiberRef.get(Option.getOrThrow(maybeTransactionSession)).pipe(
+//             Effect.flatMap(
+//               $match({
+//                 Serialized: ({ tx }) => tx.commit,
+//                 Batched: ({ writes }) =>
+//                   Effect.log(writes.map((w) => w.sql)).pipe(
+//                     Effect.andThen(
+//                       Effect.promise(() =>
+//                         client.batch(
+//                           writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
+//                         )
+//                       )
+//                     ),
+//                     Effect.tap((e) =>
+//                       Effect.log(
+//                         'ok',
+//                         writes.map((w) => w.sql)
+//                       )
+//                     )
+//                   )
+//               })
+//             ),
+//             Effect.tap(() => PubSub.publish(pub, 'commit'))
+//           ),
+//         rollback: () =>
+//           pipe(
+//             Option.getOrThrow(maybeTransactionSession),
+//             (ref) => Effect.zip(FiberRef.get(ref), Effect.succeed(ref)),
+//             Effect.flatMap(([transactionSession, ref]) =>
+//               $match({
+//                 Serialized: ({ tx }) => tx.rollback,
+//                 Batched: (a) => FiberRef.set(ref, { ...a, writes: [] })
+//               })(transactionSession)
+//             ),
+//             Effect.tap(() => PubSub.publish(pub, 'rollback'))
+//           )
+//       };
 
-        const store = yield* EventStore;
-        const pub = yield* DomainEventPublisher;
-        const sub = yield* PubSub.subscribe(pub);
-        yield* Stream.fromQueue(sub).pipe(
-          Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(store.save))),
-          Stream.runDrain,
-          Effect.fork
-        );
+//       return boundary;
+//     })
+//   );
+// }
+// export function withTransactionalBoundary(mode: Modes = 'Batched') {
+//   return <A, E, R>(
+//     useCase: Effect.Effect<A, E, R>
+//   ): Effect.Effect<
+//     A,
+//     E,
+//     TransactionalBoundary | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
+//   > =>
+//     Effect.gen(function* () {
+//       const fiber = yield* Effect.gen(function* () {
+//         const tx = yield* TransactionalBoundary;
 
-        const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
-        yield* tx.commit();
-        return result;
-      }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
+//         yield* tx.begin(mode);
 
-      const exit = yield* Fiber.await(fiber);
-      return yield* exit;
-    });
-}
+//         // const store = yield* EventStore;
+//         // const pub = yield* DomainEventPublisher;
+//         // const sub = yield* PubSub.subscribe(pub);
+//         // yield* Stream.fromQueue(sub).pipe(
+//         //   Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(store.save))),
+//         //   Stream.runDrain,
+//         //   Effect.fork
+//         // );
 
-type Modes = Exclude<TransactionSession['_tag'], 'None'>;
+//         const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
+//         yield* tx.commit();
+//         return result;
+//       }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
+
+//       const exit = yield* Fiber.await(fiber);
+//       return yield* exit;
+//     });
+// }
+
+// type Modes = Exclude<TransactionSession['_tag'], 'None'>;
 
 type DBTX = {
   commit: Effect.Effect<void>;
@@ -145,11 +211,12 @@ type DBTX = {
 };
 
 type TransactionSession = Data.TaggedEnum<{
-  Batched: { writes: ReadonlyArray<CompiledQuery<unknown>> };
+  Batched: { writes: Array<CompiledQuery<unknown>> };
   Serialized: { tx: DBTX };
+  None: object;
 }>;
 
-const { Batched, Serialized, $match, $is } = Data.taggedEnum<TransactionSession>();
+const { Batched, Serialized, None, $match, $is } = Data.taggedEnum<TransactionSession>();
 
 const initiateTransaction = <DB>(db: Kysely<DB>) =>
   Effect.async<DBTX>((resume) => {

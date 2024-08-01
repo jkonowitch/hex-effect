@@ -1,5 +1,4 @@
 export { LibsqlDialect } from './src/libsql-dialect.js';
-export { withTransactionalBoundary } from './src/transaction-boundary.js';
 export { makeEventHandlerService } from './src/messaging.js';
 export {
   EventStore,
@@ -15,10 +14,11 @@ import {
   TransactionEvents
 } from './src/service-definitions.js';
 import { Context, Layer } from 'effect';
-import { TransactionalBoundary } from './src/transaction-boundary.js';
+import { shmee as kralf } from './src/transaction-boundary.js';
 import { EventPublishingDaemon } from './src/messaging.js';
+import type { TransactionalBoundaryProvider } from '@hex-effect/core';
 
-const WithoutDependencies = TransactionalBoundary.live.pipe(
+const WithoutDependencies = kralf.pipe(
   Layer.provideMerge(EventStore.live),
   Layer.provideMerge(TransactionEvents.live),
   Layer.provideMerge(DatabaseSession.live),
@@ -31,7 +31,7 @@ const shmee = EventPublishingDaemon.pipe(
 );
 
 const z = Layer.context<
-  Context.Tag.Identifier<DatabaseSession | TransactionalBoundary | EventStore>
+  Context.Tag.Identifier<DatabaseSession | TransactionalBoundaryProvider>
 >().pipe(Layer.provide(shmee));
 
-export { TransactionalBoundary, z as WithoutDependencies, DatabaseSession };
+export { z as WithoutDependencies, DatabaseSession };
