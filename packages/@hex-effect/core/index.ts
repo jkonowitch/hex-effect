@@ -1,6 +1,6 @@
 import { Schema } from '@effect/schema';
 import type { symbol } from '@effect/schema/Serializable';
-import { Context, Effect, Fiber, PubSub, Scope } from 'effect';
+import { Context, Effect, Fiber, Layer, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 /**
@@ -78,7 +78,7 @@ class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
 
 export class TransactionalBoundaryProvider extends Context.Tag('TransactionalBoundaryProvider')<
   TransactionalBoundaryProvider,
-  { provide: Effect.Effect<Context.Tag.Service<TransactionalBoundary>> }
+  { provide: Effect.Effect<Layer.Layer<TransactionalBoundary | DomainEventPublisher>> }
 >() {}
 
 export function withTransactionalBoundary(level: IsolationLevel) {
@@ -88,7 +88,7 @@ export function withTransactionalBoundary(level: IsolationLevel) {
     A,
     E,
     | TransactionalBoundaryProvider
-    | Exclude<Exclude<Exclude<R, DomainEventPublisher>, TransactionalBoundary>, Scope.Scope>
+    | Exclude<Exclude<R, TransactionalBoundary | DomainEventPublisher>, Scope.Scope>
   > =>
     Effect.gen(function* () {
       const boundary = yield* Effect.serviceConstants(TransactionalBoundaryProvider).provide;
@@ -99,12 +99,7 @@ export function withTransactionalBoundary(level: IsolationLevel) {
         const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
         yield* tx.commit();
         return result;
-      }).pipe(
-        DomainEventPublisher.live,
-        Effect.provideService(TransactionalBoundary, boundary),
-        Effect.scoped,
-        Effect.fork
-      );
+      }).pipe(Effect.provide(boundary), Effect.scoped, Effect.fork);
 
       const exit = yield* Fiber.await(fiber);
       return yield* exit;

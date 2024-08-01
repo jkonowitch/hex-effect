@@ -1,12 +1,20 @@
 import { Kysely, Transaction, type CompiledQuery } from 'kysely';
-import { Effect, FiberRef, Data, Match, Layer, Ref } from 'effect';
+import { Effect, FiberRef, Data, Match, Layer, Ref, PubSub, Stream } from 'effect';
 import {
+  DomainEventPublisher,
   IsolationLevel,
+  TransactionalBoundary,
   TransactionalBoundaryProvider,
   type ITransactionalBoundary
 } from '@hex-effect/core';
 import { type InValue } from '@libsql/client';
-import { DatabaseConnection, DatabaseSession, TransactionEvents } from './service-definitions.js';
+import {
+  DatabaseConnection,
+  DatabaseSession,
+  EventStore,
+  TransactionEvents
+} from './service-definitions.js';
+import { Serializable } from '@effect/schema';
 
 // type LibsqlTransactionalBoundary = ITransactionalBoundary<Modes>;
 
@@ -16,64 +24,82 @@ export const shmee = Layer.effect(
     const { client, db } = yield* DatabaseConnection;
     const pub = yield* TransactionEvents;
     const session = yield* DatabaseSession;
+    const store = yield* EventStore;
 
     return {
       provide: Effect.gen(function* () {
-        const ref = yield* Ref.make<TransactionSession>(None());
+        yield* Effect.log('kralf');
+        return Layer.scoped(
+          TransactionalBoundary,
+          Effect.gen(function* () {
+            const pub = yield* DomainEventPublisher;
+            const sub = yield* PubSub.subscribe(pub);
+            yield* Stream.fromQueue(sub).pipe(
+              Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(store.save))),
+              Stream.runDrain,
+              Effect.fork
+            );
 
-        const boundary: ITransactionalBoundary = {
-          begin: (mode) =>
-            Match.value(mode).pipe(
-              Match.when(IsolationLevel.Batched, () =>
-                Effect.gen(function* () {
-                  yield* Ref.set(ref, Batched({ writes: [] }));
-                  yield* FiberRef.update(session, (current) => ({
-                    ...current,
-                    write(op) {
-                      return Ref.update(ref, (s) =>
-                        $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
-                      );
-                    }
-                  }));
-                })
-              ),
-              Match.when(IsolationLevel.Serializable, () =>
-                Effect.gen(function* () {
-                  const tx = yield* initiateTransaction(db);
-                  yield* Ref.set(ref, Serialized({ tx }));
-                  yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
-                })
-              ),
-              Match.orElse(() => Effect.dieMessage('Unsupported mode'))
-            ),
-          commit: () =>
-            Ref.get(ref).pipe(
-              Effect.flatMap(
-                $match({
-                  Batched: ({ writes }) =>
-                    Effect.promise(() =>
-                      client.batch(
-                        writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
-                      )
-                    ),
-                  Serialized: () => Effect.log('to implement'),
-                  None: () => Effect.dieMessage('kralf')
-                })
-              )
-            ),
-          rollback: () =>
-            Ref.get(ref).pipe(
-              Effect.flatMap(
-                $match({
-                  Batched: () => Ref.set(ref, Batched({ writes: [] })),
-                  Serialized: ({ tx }) => tx.rollback,
-                  None: () => Effect.dieMessage('')
-                })
-              )
-            )
-        };
+            const ref = yield* Ref.make<TransactionSession>(None());
 
-        return boundary;
+            const boundary: ITransactionalBoundary = {
+              begin: (mode) =>
+                Match.value(mode).pipe(
+                  Match.when(IsolationLevel.Batched, () =>
+                    Effect.gen(function* () {
+                      yield* Ref.set(ref, Batched({ writes: [] }));
+                      yield* FiberRef.update(session, (current) => ({
+                        ...current,
+                        write(op) {
+                          return Ref.update(ref, (s) =>
+                            $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
+                          );
+                        }
+                      }));
+                    })
+                  ),
+                  Match.when(IsolationLevel.Serializable, () =>
+                    Effect.gen(function* () {
+                      const tx = yield* initiateTransaction(db);
+                      yield* Ref.set(ref, Serialized({ tx }));
+                      yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
+                    })
+                  ),
+                  Match.orElse(() => Effect.dieMessage('Unsupported mode'))
+                ),
+              commit: () =>
+                Ref.get(ref).pipe(
+                  Effect.flatMap(
+                    $match({
+                      Batched: ({ writes }) =>
+                        Effect.promise(() =>
+                          client.batch(
+                            writes.map((w) => ({
+                              args: w.parameters as Array<InValue>,
+                              sql: w.sql
+                            }))
+                          )
+                        ),
+                      Serialized: () => Effect.log('to implement'),
+                      None: () => Effect.dieMessage('kralf')
+                    })
+                  )
+                ),
+              rollback: () =>
+                Ref.get(ref).pipe(
+                  Effect.flatMap(
+                    $match({
+                      Batched: () => Ref.set(ref, Batched({ writes: [] })),
+                      Serialized: ({ tx }) => tx.rollback,
+                      None: () => Effect.dieMessage('')
+                    })
+                  )
+                )
+            };
+
+            return boundary;
+          })
+        ).pipe(Layer.provideMerge(DomainEventPublisher.live));
       })
     };
   })
