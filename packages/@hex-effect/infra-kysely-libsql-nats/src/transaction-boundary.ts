@@ -1,5 +1,5 @@
 import { Kysely, Transaction, type CompiledQuery } from 'kysely';
-import { Effect, FiberRef, Data, Match, Layer, Ref, PubSub, Stream } from 'effect';
+import { Effect, FiberRef, Data, Match, Layer, Ref, PubSub, Stream, FiberSet, Fiber } from 'effect';
 import {
   DomainEventPublisher,
   IsolationLevel,
@@ -33,14 +33,8 @@ export const shmee = Layer.effect(
           TransactionalBoundary,
           Effect.gen(function* () {
             const pub = yield* DomainEventPublisher;
-            const sub = yield* PubSub.subscribe(pub);
-            yield* Stream.fromQueue(sub).pipe(
-              Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(store.save))),
-              Stream.runDrain,
-              Effect.fork
-            );
-
             const ref = yield* Ref.make<TransactionSession>(None());
+            const fi = yield* FiberSet.make();
 
             const boundary: ITransactionalBoundary = {
               begin: (mode) =>
@@ -51,11 +45,25 @@ export const shmee = Layer.effect(
                       yield* FiberRef.update(session, (current) => ({
                         ...current,
                         write(op) {
+                          console.log('writing ', op.sql);
                           return Ref.update(ref, (s) =>
                             $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
                           );
                         }
                       }));
+                      const sub = yield* PubSub.subscribe(pub);
+                      const fib = yield* Stream.fromQueue(sub).pipe(
+                        Stream.tap((e) =>
+                          Effect.gen(function* () {
+                            yield* Effect.log('doing stuff');
+                            const s = yield* Serializable.serialize(e);
+                            yield* store.save(s).pipe(Effect.tap(() => Effect.log('hiiia')));
+                          })
+                        ),
+                        Stream.runDrain,
+                        Effect.forkScoped
+                      );
+                      yield* fi.pipe(FiberSet.add(fib));
                     })
                   ),
                   Match.when(IsolationLevel.Serializable, () =>
@@ -68,23 +76,28 @@ export const shmee = Layer.effect(
                   Match.orElse(() => Effect.dieMessage('Unsupported mode'))
                 ),
               commit: () =>
-                Ref.get(ref).pipe(
-                  Effect.flatMap(
-                    $match({
-                      Batched: ({ writes }) =>
-                        Effect.promise(() =>
+                Effect.gen(function* () {
+                  yield* Effect.zip(pub.shutdown, Fiber.awaitAll(fi), { concurrent: true });
+                  yield* Effect.log('committing');
+
+                  const s = yield* Ref.get(ref);
+                  yield* $match({
+                    Batched: ({ writes }) =>
+                      Effect.gen(function* () {
+                        // yield* Fiber.awaitAll(fi);
+                        yield* Effect.promise(() =>
                           client.batch(
                             writes.map((w) => ({
                               args: w.parameters as Array<InValue>,
                               sql: w.sql
                             }))
                           )
-                        ),
-                      Serialized: () => Effect.log('to implement'),
-                      None: () => Effect.dieMessage('kralf')
-                    })
-                  )
-                ),
+                        );
+                      }),
+                    Serialized: () => Effect.log('to implement'),
+                    None: () => Effect.dieMessage('kralf')
+                  })(s);
+                }),
               rollback: () =>
                 Ref.get(ref).pipe(
                   Effect.flatMap(
