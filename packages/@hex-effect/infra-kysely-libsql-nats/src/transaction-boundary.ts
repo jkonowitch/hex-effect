@@ -38,46 +38,57 @@ export const shmee = Layer.effect(
 
             const boundary: ITransactionalBoundary = {
               begin: (mode) =>
-                Match.value(mode).pipe(
-                  Match.when(IsolationLevel.Batched, () =>
-                    Effect.gen(function* () {
-                      yield* Ref.set(ref, Batched({ writes: [] }));
-                      yield* FiberRef.update(session, (current) => ({
-                        ...current,
-                        write(op) {
-                          console.log('writing ', op.sql);
-                          return Ref.update(ref, (s) =>
-                            $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
-                          );
-                        }
-                      }));
-                      const sub = yield* PubSub.subscribe(pub);
-                      const fib = yield* Stream.fromQueue(sub).pipe(
-                        Stream.tap((e) =>
-                          Effect.gen(function* () {
-                            yield* Effect.log('doing stuff');
-                            const s = yield* Serializable.serialize(e);
-                            yield* store.save(s).pipe(Effect.tap(() => Effect.log('hiiia')));
-                          })
-                        ),
-                        Stream.runDrain,
-                        Effect.forkScoped
-                      );
-                      yield* fi.pipe(FiberSet.add(fib));
-                    })
+                Match.value(mode)
+                  .pipe(
+                    Match.when(IsolationLevel.Batched, () =>
+                      Effect.gen(function* () {
+                        yield* Ref.set(ref, Batched({ writes: [] }));
+                        yield* FiberRef.update(session, (current) => ({
+                          ...current,
+                          write(op) {
+                            console.log('writing ', op.sql);
+                            return Ref.update(ref, (s) =>
+                              $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
+                            );
+                          }
+                        }));
+                      })
+                    ),
+                    Match.when(IsolationLevel.Serializable, () =>
+                      Effect.gen(function* () {
+                        const tx = yield* initiateTransaction(db);
+                        yield* Ref.set(ref, Serialized({ tx }));
+                        yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
+                      })
+                    ),
+                    Match.orElse(() => Effect.dieMessage('Unsupported mode'))
+                  )
+                  .pipe(
+                    Effect.andThen(() =>
+                      Effect.gen(function* () {
+                        const sub = yield* PubSub.subscribe(pub);
+
+                        yield* FiberSet.run(
+                          fi,
+                          Stream.fromQueue(sub).pipe(
+                            Stream.tap((e) =>
+                              Effect.gen(function* () {
+                                yield* Effect.log('doing stuff');
+                                const s = yield* Serializable.serialize(e);
+                                yield* store.save(s).pipe(Effect.tap(() => Effect.log('hiiia')));
+                              })
+                            ),
+                            Stream.runDrain,
+                            Effect.forkScoped
+                          )
+                        );
+                        yield* Effect.yieldNow();
+                      })
+                    )
                   ),
-                  Match.when(IsolationLevel.Serializable, () =>
-                    Effect.gen(function* () {
-                      const tx = yield* initiateTransaction(db);
-                      yield* Ref.set(ref, Serialized({ tx }));
-                      yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
-                    })
-                  ),
-                  Match.orElse(() => Effect.dieMessage('Unsupported mode'))
-                ),
               commit: () =>
                 Effect.gen(function* () {
-                  yield* Effect.zip(pub.shutdown, Fiber.awaitAll(fi), { concurrent: true });
+                  yield* Fiber.await(yield* Fiber.interruptAll(fi).pipe(Effect.fork));
                   yield* Effect.log('committing');
 
                   const s = yield* Ref.get(ref);
