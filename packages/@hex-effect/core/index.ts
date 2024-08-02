@@ -30,10 +30,7 @@ export class DomainEventPublisher extends Context.Tag('DomainEventPublisher')<
   DomainEventPublisher,
   PubSub.PubSub<EventBaseType>
 >() {
-  public static live = Effect.provideServiceEffect(
-    DomainEventPublisher,
-    PubSub.unbounded<EventBaseType>()
-  );
+  public static live = Layer.effect(DomainEventPublisher, PubSub.bounded<EventBaseType>(2));
 }
 
 /**
@@ -71,7 +68,7 @@ export type ITransactionalBoundary = {
   rollback(): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
 };
 
-class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
+export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
   TransactionalBoundary,
   ITransactionalBoundary
 >() {}
