@@ -8,13 +8,13 @@ import {
   type ITransactionalBoundary
 } from '@hex-effect/core';
 import { type InValue } from '@libsql/client';
+import { Serializable } from '@effect/schema';
 import {
   DatabaseConnection,
   DatabaseSession,
   EventStore,
   TransactionEvents
 } from './service-definitions.js';
-import { Serializable } from '@effect/schema';
 
 export const TransactionalBoundaryProviderLive = Layer.effect(
   TransactionalBoundaryProvider,
