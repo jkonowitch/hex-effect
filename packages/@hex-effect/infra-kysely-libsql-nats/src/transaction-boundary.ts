@@ -34,7 +34,7 @@ export const shmee = Layer.effect(
           Effect.gen(function* () {
             const pub = yield* DomainEventPublisher;
             const ref = yield* Ref.make<TransactionSession>(None());
-            const fi = yield* FiberSet.make();
+            const fibers = yield* FiberSet.make();
 
             const boundary: ITransactionalBoundary = {
               begin: (mode) =>
@@ -46,7 +46,6 @@ export const shmee = Layer.effect(
                         yield* FiberRef.update(session, (current) => ({
                           ...current,
                           write(op) {
-                            console.log('writing ', op.sql);
                             return Ref.update(ref, (s) =>
                               $is('Batched')(s) ? { ...s, writes: [...s.writes, op] } : s
                             );
@@ -64,50 +63,43 @@ export const shmee = Layer.effect(
                     Match.orElse(() => Effect.dieMessage('Unsupported mode'))
                   )
                   .pipe(
-                    Effect.andThen(() =>
+                    Effect.tap(() =>
                       Effect.gen(function* () {
                         const sub = yield* PubSub.subscribe(pub);
 
                         yield* FiberSet.run(
-                          fi,
+                          fibers,
                           Stream.fromQueue(sub).pipe(
                             Stream.tap((e) =>
-                              Effect.gen(function* () {
-                                yield* Effect.log('doing stuff');
-                                const s = yield* Serializable.serialize(e);
-                                yield* store.save(s).pipe(Effect.tap(() => Effect.log('hiiia')));
-                              })
+                              Serializable.serialize(e).pipe(Effect.andThen(store.save))
                             ),
                             Stream.runDrain,
                             Effect.forkScoped
                           )
                         );
+
                         yield* Effect.yieldNow();
                       })
                     )
                   ),
               commit: () =>
                 Effect.gen(function* () {
-                  yield* Fiber.await(yield* Fiber.interruptAll(fi).pipe(Effect.fork));
-                  yield* Effect.log('committing');
+                  yield* Fiber.await(yield* Fiber.interruptAll(fibers).pipe(Effect.fork));
+                  const txSession = yield* Ref.get(ref);
 
-                  const s = yield* Ref.get(ref);
                   yield* $match({
                     Batched: ({ writes }) =>
-                      Effect.gen(function* () {
-                        // yield* Fiber.awaitAll(fi);
-                        yield* Effect.promise(() =>
-                          client.batch(
-                            writes.map((w) => ({
-                              args: w.parameters as Array<InValue>,
-                              sql: w.sql
-                            }))
-                          )
-                        );
-                      }),
+                      Effect.promise(() =>
+                        client.batch(
+                          writes.map((w) => ({
+                            args: w.parameters as Array<InValue>,
+                            sql: w.sql
+                          }))
+                        )
+                      ),
                     Serialized: () => Effect.log('to implement'),
                     None: () => Effect.dieMessage('kralf')
-                  })(s);
+                  })(txSession);
                 }),
               rollback: () =>
                 Ref.get(ref).pipe(
