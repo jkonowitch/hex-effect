@@ -75,7 +75,7 @@ export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
 
 export class TransactionalBoundaryProvider extends Context.Tag('TransactionalBoundaryProvider')<
   TransactionalBoundaryProvider,
-  { provide: Effect.Effect<Layer.Layer<TransactionalBoundary | DomainEventPublisher>> }
+  Layer.Layer<TransactionalBoundary | DomainEventPublisher>
 >() {}
 
 export function withTransactionalBoundary(level: IsolationLevel) {
@@ -88,7 +88,7 @@ export function withTransactionalBoundary(level: IsolationLevel) {
     | Exclude<Exclude<R, TransactionalBoundary | DomainEventPublisher>, Scope.Scope>
   > =>
     Effect.gen(function* () {
-      const boundary = yield* Effect.serviceConstants(TransactionalBoundaryProvider).provide;
+      const boundary = yield* TransactionalBoundaryProvider;
 
       const fiber = yield* Effect.gen(function* () {
         const tx = yield* TransactionalBoundary;

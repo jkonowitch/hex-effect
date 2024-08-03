@@ -14,7 +14,7 @@ import {
   TransactionEvents
 } from './src/service-definitions.js';
 import { Context, Layer } from 'effect';
-import { shmee as kralf } from './src/transaction-boundary.js';
+import { TransactionalBoundaryProviderLive as kralf } from './src/transaction-boundary.js';
 import { EventPublishingDaemon } from './src/messaging.js';
 import type { TransactionalBoundaryProvider } from '@hex-effect/core';
 
