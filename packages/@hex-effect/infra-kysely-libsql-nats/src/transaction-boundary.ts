@@ -29,17 +29,16 @@ export const shmee = Layer.effect(
     return {
       provide: Effect.gen(function* () {
         yield* Effect.log('kralf');
-        return Layer.scoped(
+        return Layer.effect(
           TransactionalBoundary,
           Effect.gen(function* () {
             const pub = yield* DomainEventPublisher;
             const ref = yield* Ref.make<TransactionSession>(None());
-            const fibers = yield* FiberSet.make();
 
             const boundary: ITransactionalBoundary = {
               begin: (mode) =>
-                Match.value(mode)
-                  .pipe(
+                Effect.gen(function* () {
+                  yield* Match.value(mode).pipe(
                     Match.when(IsolationLevel.Batched, () =>
                       Effect.gen(function* () {
                         yield* Ref.set(ref, Batched({ writes: [] }));
@@ -61,30 +60,24 @@ export const shmee = Layer.effect(
                       })
                     ),
                     Match.orElse(() => Effect.dieMessage('Unsupported mode'))
-                  )
-                  .pipe(
-                    Effect.tap(() =>
-                      Effect.gen(function* () {
-                        const sub = yield* PubSub.subscribe(pub);
+                  );
 
-                        yield* FiberSet.run(
-                          fibers,
-                          Stream.fromQueue(sub).pipe(
-                            Stream.tap((e) =>
-                              Serializable.serialize(e).pipe(Effect.andThen(store.save))
-                            ),
-                            Stream.runDrain,
-                            Effect.forkScoped
-                          )
-                        );
+                  const sub = yield* PubSub.subscribe(pub);
 
-                        yield* Effect.yieldNow();
-                      })
-                    )
-                  ),
+                  yield* Stream.fromQueue(sub).pipe(
+                    Stream.tap((e) => Serializable.serialize(e).pipe(Effect.andThen(store.save))),
+                    Stream.tap(Effect.log),
+                    Stream.runDrain,
+                    Effect.forkScoped
+                  );
+
+                  yield* Effect.yieldNow();
+                }),
+
               commit: () =>
                 Effect.gen(function* () {
-                  yield* Fiber.await(yield* Fiber.interruptAll(fibers).pipe(Effect.fork));
+                  yield* Fiber.await(yield* pub.shutdown.pipe(Effect.fork));
+                  yield* Effect.log('committing');
                   const txSession = yield* Ref.get(ref);
 
                   yield* $match({
@@ -120,128 +113,6 @@ export const shmee = Layer.effect(
     };
   })
 );
-
-// export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
-//   TransactionalBoundary,
-//   LibsqlTransactionalBoundary
-// >() {
-//   public static live = Layer.effect(
-//     TransactionalBoundary,
-//     Effect.gen(function* () {
-//       const { client, db } = yield* DatabaseConnection;
-//       let maybeTransactionSession = Option.none<FiberRef.FiberRef<TransactionSession>>();
-//       const pub = yield* TransactionEvents;
-//       const session = yield* DatabaseSession;
-//       const boundary: LibsqlTransactionalBoundary = {
-//         begin: (mode) =>
-//           Match.value(mode)
-//             .pipe(
-//               Match.when('Batched', () =>
-//                 Effect.gen(function* () {
-//                   const ref = yield* FiberRef.make<TransactionSession>(Batched({ writes: [] }));
-//                   maybeTransactionSession = Option.some(ref);
-//                   yield* FiberRef.getAndUpdate(session, (current) => ({
-//                     ...current,
-//                     write(op) {
-//                       return FiberRef.update(ref, (a) => {
-//                         if ($is('Batched')(a)) {
-//                           a.writes.push(op);
-//                         }
-//                         return a;
-//                       });
-//                     }
-//                   }));
-//                 })
-//               ),
-//               Match.when('Serialized', () =>
-//                 Effect.gen(function* () {
-//                   const tx = yield* initiateTransaction(db);
-//                   const ref = yield* FiberRef.make<TransactionSession>(Serialized({ tx }));
-//                   maybeTransactionSession = Option.some(ref);
-//                   yield* FiberRef.set(session, DatabaseSession.createDatabaseSession(tx.tx));
-//                 })
-//               ),
-//               Match.exhaustive
-//             )
-//             .pipe(Effect.tap(() => PubSub.publish(pub, 'begin'))),
-//         commit: () =>
-//           // TODO - this should return some sort of abstracted Transaction error to the application service under certain conditions...
-//           FiberRef.get(Option.getOrThrow(maybeTransactionSession)).pipe(
-//             Effect.flatMap(
-//               $match({
-//                 Serialized: ({ tx }) => tx.commit,
-//                 Batched: ({ writes }) =>
-//                   Effect.log(writes.map((w) => w.sql)).pipe(
-//                     Effect.andThen(
-//                       Effect.promise(() =>
-//                         client.batch(
-//                           writes.map((w) => ({ args: w.parameters as Array<InValue>, sql: w.sql }))
-//                         )
-//                       )
-//                     ),
-//                     Effect.tap((e) =>
-//                       Effect.log(
-//                         'ok',
-//                         writes.map((w) => w.sql)
-//                       )
-//                     )
-//                   )
-//               })
-//             ),
-//             Effect.tap(() => PubSub.publish(pub, 'commit'))
-//           ),
-//         rollback: () =>
-//           pipe(
-//             Option.getOrThrow(maybeTransactionSession),
-//             (ref) => Effect.zip(FiberRef.get(ref), Effect.succeed(ref)),
-//             Effect.flatMap(([transactionSession, ref]) =>
-//               $match({
-//                 Serialized: ({ tx }) => tx.rollback,
-//                 Batched: (a) => FiberRef.set(ref, { ...a, writes: [] })
-//               })(transactionSession)
-//             ),
-//             Effect.tap(() => PubSub.publish(pub, 'rollback'))
-//           )
-//       };
-
-//       return boundary;
-//     })
-//   );
-// }
-// export function withTransactionalBoundary(mode: Modes = 'Batched') {
-//   return <A, E, R>(
-//     useCase: Effect.Effect<A, E, R>
-//   ): Effect.Effect<
-//     A,
-//     E,
-//     TransactionalBoundary | Exclude<Exclude<R, DomainEventPublisher>, Scope.Scope>
-//   > =>
-//     Effect.gen(function* () {
-//       const fiber = yield* Effect.gen(function* () {
-//         const tx = yield* TransactionalBoundary;
-
-//         yield* tx.begin(mode);
-
-//         // const store = yield* EventStore;
-//         // const pub = yield* DomainEventPublisher;
-//         // const sub = yield* PubSub.subscribe(pub);
-//         // yield* Stream.fromQueue(sub).pipe(
-//         //   Stream.tap((e) => Serializable.serialize(e).pipe(Effect.tap(store.save))),
-//         //   Stream.runDrain,
-//         //   Effect.fork
-//         // );
-
-//         const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
-//         yield* tx.commit();
-//         return result;
-//       }).pipe(DomainEventPublisher.live, Effect.scoped, Effect.fork);
-
-//       const exit = yield* Fiber.await(fiber);
-//       return yield* exit;
-//     });
-// }
-
-// type Modes = Exclude<TransactionSession['_tag'], 'None'>;
 
 type DBTX = {
   commit: Effect.Effect<void>;
