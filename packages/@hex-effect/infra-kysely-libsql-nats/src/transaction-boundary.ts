@@ -56,15 +56,19 @@ export const TransactionalBoundaryProviderLive = Layer.effect(
                 Match.orElse(() => Effect.dieMessage('Unsupported mode'))
               );
 
-              const sub = yield* PubSub.subscribe(pub);
-              yield* Stream.fromQueue(sub).pipe(
-                Stream.tap((e) => Serializable.serialize(e).pipe(Effect.andThen(store.save))),
-                Stream.tap(Effect.logDebug),
-                Stream.runDrain,
-                Effect.forkScoped
+              yield* PubSub.subscribe(pub).pipe(
+                Effect.andThen((sub) =>
+                  Stream.fromQueue(sub).pipe(
+                    Stream.tap((e) => Serializable.serialize(e).pipe(Effect.andThen(store.save))),
+                    Stream.tap(Effect.logDebug),
+                    Stream.runDrain,
+                    Effect.forkScoped
+                  )
+                )
               );
-              yield* Effect.yieldNow();
 
+              // ensure subscription begins before exiting the begin phase
+              yield* Effect.yieldNow();
               yield* transactionEventPublisher.publish('begin');
             }),
 
