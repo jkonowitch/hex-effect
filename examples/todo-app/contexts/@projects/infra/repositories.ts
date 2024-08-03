@@ -147,7 +147,7 @@ const TaskRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const { read } = yield* FiberRef.get(session);
 
-          const { rows: records } = yield* read(
+          const { rows } = yield* read(
             queryBuilder
               .selectFrom('tasks')
               .selectAll()
@@ -156,7 +156,7 @@ const TaskRepositoryLive = Layer.effect(
           ).pipe(Effect.orDie);
 
           return Option.some(
-            records.map((v) => Schema.decodeSync(RefinedTask)({ ...v, _tag: 'Task' }))
+            rows.map((v) => Schema.decodeSync(RefinedTask)({ ...v, _tag: 'Task' }))
           );
         })
     }))
