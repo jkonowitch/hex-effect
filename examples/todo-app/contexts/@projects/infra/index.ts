@@ -1,5 +1,5 @@
 import { Layer, Logger, LogLevel, ManagedRuntime } from 'effect';
-import { WithoutDependencies } from '@hex-effect/infra-kysely-libsql-nats';
+import { InfrastructureLayer } from '@hex-effect/infra-kysely-libsql-nats';
 // import { NatsService } from './services.js';
 import { DomainServiceLive } from './repositories.js';
 
@@ -19,7 +19,7 @@ import { DomainServiceLive } from './repositories.js';
 
 export const managedRuntime = ManagedRuntime.make(
   DomainServiceLive.pipe(
-    Layer.provideMerge(WithoutDependencies),
+    Layer.provideMerge(InfrastructureLayer),
     Layer.provide(Logger.minimumLogLevel(LogLevel.All)),
     Layer.orDie
   )
