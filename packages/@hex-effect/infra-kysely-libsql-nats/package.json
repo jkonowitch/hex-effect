@@ -22,6 +22,10 @@
     "@hex-effect/core": "workspace:*"
   },
   "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "default": {
       "default": "./index.ts"
     }

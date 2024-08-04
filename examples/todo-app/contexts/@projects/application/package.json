@@ -17,7 +17,7 @@
   },
   "type": "module",
   "exports": {
-    "production": {
+    "node": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
