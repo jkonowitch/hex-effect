@@ -20,7 +20,7 @@
     "bun": ">=1",
     "pnpm": ">=9"
   },
-  "packageManager": "pnpm@9.4.0",
+  "packageManager": "pnpm@9.6.0",
   "dependencies": {
     "@effect/platform": "^0.59.2",
     "@effect/rpc": "^0.32.2",
