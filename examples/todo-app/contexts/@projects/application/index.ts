@@ -1,10 +1,6 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import {
-  type EventHandlerService as IEventHandlerService,
-  IsolationLevel,
-  withTransactionalBoundary
-} from '@hex-effect/core';
+import { EventHandlerService, IsolationLevel, withTransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   TaskCompletedEvent,
@@ -15,7 +11,7 @@ import {
   TaskRepository,
   ProjectDomainEvents
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Context, Match } from 'effect';
+import { Effect, type Request, Option, pipe, Match } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -176,23 +172,14 @@ const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
   );
 
 /**
- * Application Services
+ * Utils
  */
-
-export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
-  EventHandlerService,
-  IEventHandlerService
->() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
   Request.Request.Success<A>,
   Request.Request.Error<A>,
   unknown
 >;
-
-/**
- * Utils
- */
 
 function succeedOrNotFound<A, R>(message = 'Not Found') {
   return (eff: Effect.Effect<Option.Option<A>, never, R>) =>

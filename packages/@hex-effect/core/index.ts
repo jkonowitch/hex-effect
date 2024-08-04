@@ -37,17 +37,20 @@ export class DomainEventPublisher extends Context.Tag('DomainEventPublisher')<
  * Service which allows an `application` to connect a Domain Event with a handler
  * This is a linchpin service that enables an event-driven architecture
  */
-export type EventHandlerService = {
-  register<Q extends EventBaseType, I, R extends never, Err, Req>(
-    eventSchema: Schema.Schema<Q, I, R>,
-    triggers: {
-      context: Schema.Schema<Q, I, R>['Type']['_context'];
-      tag: Schema.Schema<Q, I, R>['Type']['_tag'];
-    }[],
-    handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
-    config: { $durableName: string }
-  ): Effect.Effect<void, never, Req>;
-};
+export class EventHandlerService extends Context.Tag('EventHandlerService')<
+  EventHandlerService,
+  {
+    register<Q extends EventBaseType, I, R extends never, Err, Req>(
+      eventSchema: Schema.Schema<Q, I, R>,
+      triggers: {
+        context: Schema.Schema<Q, I, R>['Type']['_context'];
+        tag: Schema.Schema<Q, I, R>['Type']['_tag'];
+      }[],
+      handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
+      config: { $durableName: string }
+    ): Effect.Effect<void, never, Req>;
+  }
+>() {}
 
 export enum IsolationLevel {
   ReadCommitted = 'ReadCommitted',
