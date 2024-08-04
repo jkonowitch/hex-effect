@@ -89,6 +89,9 @@ importers:
 
   examples/todo-app/contexts/@projects/infra:
     dependencies:
+      '@hex-effect/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/core
       '@hex-effect/infra-kysely-libsql-nats':
         specifier: workspace:*
         version: link:../../../../../packages/@hex-effect/infra-kysely-libsql-nats
@@ -187,30 +190,6 @@ importers:
       vitest:
         specifier: ^1.3.1
         version: 1.6.0(@types/node@20.12.14)
-
-  examples/todo-app/web/build:
-    dependencies:
-      '@projects/application':
-        specifier: workspace:*
-        version: link:../../contexts/@projects/application
-      '@projects/domain':
-        specifier: workspace:*
-        version: link:../../contexts/@projects/domain
-      '@projects/infra':
-        specifier: workspace:*
-        version: link:../../contexts/@projects/infra
-      '@repo/ui':
-        specifier: workspace:*
-        version: link:../../../../packages/@repo/ui
-      cookie:
-        specifier: latest
-        version: 0.6.0
-      devalue:
-        specifier: latest
-        version: 5.0.0
-      set-cookie-parser:
-        specifier: latest
-        version: 2.6.0
 
   packages/@hex-effect/core:
     dependencies:

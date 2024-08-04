@@ -1,8 +1,6 @@
 import { Router, Rpc } from '@effect/rpc';
 import { Schema } from '@effect/schema';
-import type { EventHandlerService as IEventHandlerService } from '@hex-effect/core';
-import type { Modes } from '@hex-effect/infra-kysely-libsql-nats';
-import type { TransactionalBoundary as ITransactionalBoundary } from '@hex-effect/core';
+import { EventHandlerService, IsolationLevel, withTransactionalBoundary } from '@hex-effect/core';
 import {
   Project,
   TaskCompletedEvent,
@@ -13,7 +11,7 @@ import {
   TaskRepository,
   ProjectDomainEvents
 } from '@projects/domain';
-import { Effect, type Request, Option, pipe, Scope, Context, Match, Fiber } from 'effect';
+import { Effect, type Request, Option, pipe, Match } from 'effect';
 import { get } from 'effect/Struct';
 
 /**
@@ -77,7 +75,9 @@ const createProject = ({ title }: CreateProject) =>
     const project = yield* Project.create(title);
     yield* Effect.serviceFunctions(ProjectRepository).save(project);
     return project.id;
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CreateProject>;
+  }).pipe(
+    withTransactionalBoundary(IsolationLevel.Batched)
+  ) satisfies RequestHandler<CreateProject>;
 
 const addTask = ({ description, projectId }: AddTask) =>
   pipe(
@@ -86,7 +86,7 @@ const addTask = ({ description, projectId }: AddTask) =>
     Effect.flatMap((project) => project.addTask(description)),
     Effect.tap(Effect.serviceFunctions(TaskRepository).save),
     Effect.map(get('id')),
-    withTransactionalBoundary()
+    withTransactionalBoundary(IsolationLevel.Batched)
   ) satisfies RequestHandler<AddTask>;
 
 const completeTask = ({ taskId }: CompleteTask) =>
@@ -98,7 +98,7 @@ const completeTask = ({ taskId }: CompleteTask) =>
       Effect.flatMap(Task.complete)
     );
     yield* repo.save(task);
-  }).pipe(withTransactionalBoundary()) satisfies RequestHandler<CompleteTask>;
+  }).pipe(withTransactionalBoundary(IsolationLevel.Batched)) satisfies RequestHandler<CompleteTask>;
 
 const projectWithTasks = ({ projectId }: GetProjectWithTasks) =>
   Effect.zip(
@@ -172,28 +172,14 @@ const someCompositeEventHandler = (e: (typeof ProjectDomainEvents)['Type']) =>
   );
 
 /**
- * Application Services
+ * Utils
  */
-
-export class TransactionalBoundary extends Context.Tag('ProjectTransactionalBoundary')<
-  TransactionalBoundary,
-  ITransactionalBoundary<Modes>
->() {}
-
-export class EventHandlerService extends Context.Tag('ProjectEventHandlerService')<
-  EventHandlerService,
-  IEventHandlerService
->() {}
 
 type RequestHandler<A extends Request.Request<unknown, unknown>> = Effect.Effect<
   Request.Request.Success<A>,
   Request.Request.Error<A>,
   unknown
 >;
-
-/**
- * Utils
- */
 
 function succeedOrNotFound<A, R>(message = 'Not Found') {
   return (eff: Effect.Effect<Option.Option<A>, never, R>) =>
@@ -205,22 +191,4 @@ function succeedOrNotFound<A, R>(message = 'Not Found') {
         })
       )
     );
-}
-
-function withTransactionalBoundary(mode: Modes = 'Batched') {
-  return <A, E, R>(
-    eff: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, TransactionalBoundary | Exclude<R, Scope.Scope>> =>
-    Effect.gen(function* () {
-      const fiber = yield* Effect.gen(function* () {
-        const tx = yield* TransactionalBoundary;
-        yield* tx.begin(mode);
-        const result = yield* eff.pipe(Effect.tapError(tx.rollback));
-        yield* tx.commit();
-        return result;
-      }).pipe(Effect.scoped, Effect.fork);
-
-      const exit = yield* Fiber.await(fiber);
-      return yield* exit;
-    });
 }

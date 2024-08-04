@@ -1,11 +1,17 @@
 import { Schema } from '@effect/schema';
-import type { EventHandlerService } from '@hex-effect/core';
-import { Context, Data, Effect, Either, Layer, Stream } from 'effect';
+import { EventHandlerService } from '@hex-effect/core';
+import { Data, Effect, Either, Equal, Layer, PubSub, Queue, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
 import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
 import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
-import type { EventStoreService, NatsService, StoredEvent } from './service-definitions.js';
+import {
+  EventStore,
+  NatsService,
+  TransactionEvents,
+  type INatsService,
+  type StoredEvent
+} from './service-definitions.js';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -13,58 +19,76 @@ class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   }
 }
 
+export const EventPublishingDaemon = Layer.scopedDiscard(
+  Effect.gen(function* () {
+    const pub = yield* TransactionEvents;
+    const dequeue = yield* PubSub.subscribe(pub);
+    yield* Queue.take(dequeue)
+      .pipe(
+        Effect.map(Equal.equals('commit')),
+        Effect.if({
+          onTrue: () => publishingPipeline,
+          onFalse: () => Effect.void
+        }),
+        Effect.forever
+      )
+      .pipe(Effect.forkScoped);
+  })
+);
+
 const callNats = <T>(operation: Promise<T>) =>
   Effect.tryPromise({
     try: () => operation,
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-export const makePublishingPipeline = (eventStore: EventStoreService, natsService: NatsService) => {
-  const publishEvent = (event: StoredEvent) =>
-    callNats(
-      natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
-        msgID: event.id,
-        timeout: 1000
-      })
-    );
+const publishingPipeline = Effect.zip(EventStore, NatsService).pipe(
+  Effect.flatMap(([eventStore, natsService]) => {
+    const publishEvent = (event: StoredEvent) =>
+      callNats(
+        natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
+          msgID: event.id,
+          timeout: 1000
+        })
+      );
 
-  return eventStore
-    .getUnpublished()
-    .pipe(
-      Effect.andThen((events) =>
-        Effect.zip(
-          Effect.forEach(events, publishEvent),
-          eventStore.markPublished(events.map((e) => e.id))
+    return eventStore
+      .getUnpublished()
+      .pipe(
+        Effect.andThen((events) =>
+          Effect.zip(
+            Effect.forEach(events, publishEvent),
+            eventStore.markPublished(events.map((e) => e.id))
+          )
         )
-      )
-    )
-    .pipe(Effect.catchAll((e) => Effect.logError(e)));
-};
+      );
+  })
+);
 
-export const makeEventHandlerService = <Tag>(
-  natsService: NatsService,
-  tag: Context.Tag<Tag, EventHandlerService>
-) => {
-  const live: EventHandlerService = {
-    register(eventSchema, triggers, handler, config) {
-      return Effect.gen(function* () {
-        const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
-        yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
-          Effect.gen(function* () {
-            const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
-            yield* handler(decoded).pipe(Effect.annotateLogs('msgId', decoded.messageId));
-          })
-        );
-      });
-    }
-  };
+export const EventHandlerServiceLive = Layer.effect(
+  EventHandlerService,
+  Effect.gen(function* () {
+    const natsService = yield* NatsService;
 
-  return Layer.succeed(tag, live);
-};
+    return {
+      register(eventSchema, triggers, handler, config) {
+        return Effect.gen(function* () {
+          const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
+          yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
+            Effect.gen(function* () {
+              const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
+              yield* handler(decoded).pipe(Effect.annotateLogs('msgId', decoded.messageId));
+            })
+          );
+        });
+      }
+    };
+  })
+);
 
 const streamEventsToHandler = <A, E, R>(
   consumerInfo: ConsumerInfo,
-  natsService: NatsService,
+  natsService: INatsService,
   handler: (payload: string) => Effect.Effect<A, E, R>
 ) =>
   Effect.gen(function* () {
@@ -98,7 +122,7 @@ const streamEventsToHandler = <A, E, R>(
   }).pipe(Effect.catchAll(Effect.logError), Effect.scoped);
 
 const upsertConsumer = (
-  natsService: NatsService,
+  natsService: INatsService,
   $durableName: string,
   triggers: { context: string; tag: string }[]
 ) =>
