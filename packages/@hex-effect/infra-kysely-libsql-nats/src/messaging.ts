@@ -1,6 +1,6 @@
 import { Schema } from '@effect/schema';
-import type { EventHandlerService } from '@hex-effect/core';
-import { Context, Data, Effect, Either, Equal, Layer, PubSub, Queue, Stream } from 'effect';
+import { EventHandlerService } from '@hex-effect/core';
+import { Data, Effect, Either, Equal, Layer, PubSub, Queue, Stream } from 'effect';
 import { UnknownException } from 'effect/Cause';
 import { constTrue } from 'effect/Function';
 import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
@@ -65,26 +65,26 @@ const publishingPipeline = Effect.zip(EventStore, NatsService).pipe(
   })
 );
 
-export const makeEventHandlerService = <Tag>(
-  natsService: INatsService,
-  tag: Context.Tag<Tag, EventHandlerService>
-) => {
-  const live: EventHandlerService = {
-    register(eventSchema, triggers, handler, config) {
-      return Effect.gen(function* () {
-        const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
-        yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
-          Effect.gen(function* () {
-            const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
-            yield* handler(decoded).pipe(Effect.annotateLogs('msgId', decoded.messageId));
-          })
-        );
-      });
-    }
-  };
+export const EventHandlerServiceLive = Layer.effect(
+  EventHandlerService,
+  Effect.gen(function* () {
+    const natsService = yield* NatsService;
 
-  return Layer.succeed(tag, live);
-};
+    return {
+      register(eventSchema, triggers, handler, config) {
+        return Effect.gen(function* () {
+          const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
+          yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
+            Effect.gen(function* () {
+              const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
+              yield* handler(decoded).pipe(Effect.annotateLogs('msgId', decoded.messageId));
+            })
+          );
+        });
+      }
+    };
+  })
+);
 
 const streamEventsToHandler = <A, E, R>(
   consumerInfo: ConsumerInfo,

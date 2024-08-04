@@ -1,6 +1,5 @@
-import type { TransactionalBoundaryProvider } from '@hex-effect/core';
+import type { EventHandlerService, TransactionalBoundaryProvider } from '@hex-effect/core';
 export { LibsqlDialect } from './src/libsql-dialect.js';
-export { makeEventHandlerService } from './src/messaging.js';
 export { EventStore, NatsSubject } from './src/service-definitions.js';
 
 import {
@@ -13,6 +12,7 @@ import {
 import { Context, Layer } from 'effect';
 import { TransactionalBoundaryProviderLive } from './src/transaction-boundary.js';
 import { EventPublishingDaemon } from './src/messaging.js';
+import { EventHandlerServiceLive } from './src/messaging.js';
 
 const WithoutDependencies = TransactionalBoundaryProviderLive.pipe(
   Layer.provideMerge(EventStore.live),
@@ -23,11 +23,12 @@ const WithoutDependencies = TransactionalBoundaryProviderLive.pipe(
 
 const WithEventPublishingDaemon = EventPublishingDaemon.pipe(
   Layer.provideMerge(WithoutDependencies),
+  Layer.provideMerge(EventHandlerServiceLive),
   Layer.provide(NatsService.live())
 );
 
 const InfrastructureLayer = Layer.context<
-  Context.Tag.Identifier<DatabaseSession | TransactionalBoundaryProvider>
+  Context.Tag.Identifier<DatabaseSession | TransactionalBoundaryProvider | EventHandlerService>
 >().pipe(Layer.provide(WithEventPublishingDaemon));
 
 export { InfrastructureLayer, DatabaseSession };
