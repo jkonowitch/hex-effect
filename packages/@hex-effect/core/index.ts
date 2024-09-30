@@ -111,12 +111,10 @@ class EventStore extends Context.Tag('EventStore')<
   { save: (e: EventBaseType[]) => Effect.Effect<void> }
 >() {}
 
-type WithTransaction = <A, E, R>(
-  eff: Effect.Effect<A, E, R>,
-  isolationLevel: IsolationLevel
-) => Effect.Effect<A, E, R>;
-
-const WithTransaction = Context.GenericTag<WithTransaction>('WithTransaction');
+class WithTransaction extends Context.Tag('WithTransaction')<
+  WithTransaction,
+  <A, E, R>(eff: Effect.Effect<A, E, R>, isolationLevel: IsolationLevel) => Effect.Effect<A, E, R>
+>() {}
 
 export class TransactionEvents extends Context.Tag('TransactionEvents')<
   TransactionEvents,
