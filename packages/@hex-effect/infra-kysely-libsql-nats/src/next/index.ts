@@ -14,8 +14,7 @@ const WTLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const r = sql<{ hello: boolean }>`hello`;
-    r.compile();
+
     return <A, E, R>(eff: Effect.Effect<A, E, R>, isolationLevel: IsolationLevel) => {
       if (isolationLevel === IsolationLevel.Batched) {
         const prog = Effect.withFiberRuntime<A, E, R>((fiber) =>
@@ -27,9 +26,12 @@ const WTLive = Layer.effect(
               FiberRef.currentContext,
               Context.add(ctx, WriteThing, (stm) => Ref.update(ref, (a) => [...a, stm]))
             );
+            yield* Effect.log(q, yield* Ref.get(ref));
             return q;
           })
         );
+
+        return prog;
       }
 
       return sql.withTransaction(eff).pipe(Effect.orDie);
