@@ -105,3 +105,39 @@ export function withTransactionalBoundary(level: IsolationLevel) {
       return yield* exit;
     });
 }
+
+class EventStore extends Context.Tag('EventStore')<
+  EventStore,
+  { save: (e: EventBaseType[]) => Effect.Effect<void> }
+>() {}
+
+type WithTransaction = <A, E, R>(
+  eff: Effect.Effect<A, E, R>,
+  isolationLevel: IsolationLevel
+) => Effect.Effect<A, E, R>;
+
+const WithTransaction = Context.GenericTag<WithTransaction>('WithTransaction');
+
+export class TransactionEvents extends Context.Tag('TransactionEvents')<
+  TransactionEvents,
+  PubSub.PubSub<'committed' | 'rolled-back'>
+>() {
+  public static live = Layer.effect(
+    TransactionEvents,
+    PubSub.sliding<'committed' | 'rolled-back'>(10)
+  );
+}
+
+export function withNextTXBoundary(level: IsolationLevel) {
+  return <A extends EventBaseType[], E, R>(
+    useCase: Effect.Effect<A, E, R>
+  ): Effect.Effect<A, E, WithTransaction | EventStore | TransactionEvents | R> =>
+    Effect.gen(function* () {
+      const withTx = yield* WithTransaction;
+      const eventStore = yield* EventStore;
+      const txEvents = yield* TransactionEvents;
+      const events = yield* withTx(useCase.pipe(Effect.tap(eventStore.save)), level);
+      yield* txEvents.publish('committed');
+      return events;
+    });
+}
