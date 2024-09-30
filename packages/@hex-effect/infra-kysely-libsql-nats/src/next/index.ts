@@ -3,7 +3,7 @@ import { Context, Effect, FiberRef, Layer, Ref } from 'effect';
 import { SqlClient, Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 
-class WriteThing extends Context.Tag('WriteThing')<
+export class WriteThing extends Context.Tag('WriteThing')<
   WriteThing,
   (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
 >() {
