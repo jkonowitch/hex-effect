@@ -106,12 +106,12 @@ export function withTransactionalBoundary(level: IsolationLevel) {
     });
 }
 
-class EventStore extends Context.Tag('EventStore')<
+export class EventStore extends Context.Tag('EventStore')<
   EventStore,
   { save: (e: EventBaseType[]) => Effect.Effect<void> }
 >() {}
 
-class WithTransaction extends Context.Tag('WithTransaction')<
+export class WithTransaction extends Context.Tag('WithTransaction')<
   WithTransaction,
   <A, E, R>(eff: Effect.Effect<A, E, R>, isolationLevel: IsolationLevel) => Effect.Effect<A, E, R>
 >() {}
