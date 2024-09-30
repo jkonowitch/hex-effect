@@ -224,11 +224,11 @@ importers:
   packages/@hex-effect/core:
     dependencies:
       '@effect/schema':
-        specifier: '>=0.68'
-        version: 0.68.26(effect@3.5.6)
+        specifier: '>=0.74'
+        version: 0.74.1(effect@3.8.4)
       effect:
-        specifier: '>=3.4'
-        version: 3.5.6
+        specifier: '>=3.8'
+        version: 3.8.4
       nanoid:
         specifier: ~5.0.7
         version: 5.0.7
@@ -243,8 +243,8 @@ importers:
   packages/@hex-effect/infra-kysely-libsql-nats:
     dependencies:
       '@effect/schema':
-        specifier: '>=0.68'
-        version: 0.68.26(effect@3.5.6)
+        specifier: '>=0.74'
+        version: 0.74.1(effect@3.8.4)
       '@hex-effect/core':
         specifier: workspace:*
         version: link:../core
@@ -252,8 +252,8 @@ importers:
         specifier: ~0.14.0
         version: 0.14.0
       effect:
-        specifier: '>=3.4'
-        version: 3.5.6
+        specifier: '>=3.8'
+        version: 3.8.4
       kysely:
         specifier: ~0.27.4
         version: 0.27.4
@@ -354,11 +354,6 @@ packages:
       '@effect/platform': ^0.66.2
       '@effect/schema': ^0.74.1
       effect: ^3.8.4
-
-  '@effect/schema@0.68.26':
-    resolution: {integrity: sha512-o1O/ZmlHXRe9t548YrQ9sudjRWJqCtsU9KnQHzvZm5pHSc4reuZVQufCXctcR0aETf9OFOYUuETrxjEQehq/Lg==}
-    peerDependencies:
-      effect: ^3.5.6
 
   '@effect/schema@0.74.1':
     resolution: {integrity: sha512-koTi0M1MYUjEDawLmksXBROROLx0BEG2ErwVGLVawmwuBwVbw1MTEd0QlG2+jds5avYXCJp67rHS7cuIxmnBwg==}
@@ -1198,9 +1193,6 @@ packages:
     resolution: {integrity: sha512-ZmdL2rui+eB2YwhsWzjInR8LldtZHGDoQ1ugH85ppHKwpUHL7j7rN0Ti9NCnGiQbhaZ11FpR+7ao1dNsmduNUg==}
     engines: {node: '>=12'}
 
-  effect@3.5.6:
-    resolution: {integrity: sha512-3PMiC+XMaLkHx9Nlxfr6ot/8/gVq9aEjMlBvyKzJx0p4h1ZyNEjPxvAZQ9tlxAtXBvmfRpmIwHxG99hi8qhEtQ==}
-
   effect@3.8.4:
     resolution: {integrity: sha512-rOZ1XAi+Fb+fAHoUJ5FnJPSPZEBxVbCl5QWtOWFTgOeFHx0QpbK3pezWvq9OIxQPdwvSkPOw926qrs4xdD9dLA==}
 
@@ -1291,10 +1283,6 @@ packages:
   exit-hook@4.0.0:
     resolution: {integrity: sha512-Fqs7ChZm72y40wKjOFXBKg7nJZvQJmewP5/7LtePDdnah/+FH9Hp5sgMujSCMPXlxOAW2//1jrW9pnsY7o20vQ==}
     engines: {node: '>=18'}
-
-  fast-check@3.20.0:
-    resolution: {integrity: sha512-pZIjqLpOZgdSLecec4GKC3Zq5702MZ34upMKxojnNVSWA0K64V3pXOBT1Wdsrc3AphLtzRBbsi8bRWF4TUGmUg==}
-    engines: {node: '>=8.0.0'}
 
   fast-check@3.22.0:
     resolution: {integrity: sha512-8HKz3qXqnHYp/VCNn2qfjHdAdcI8zcSqOyX64GOMukp7SL2bfzfeDKjSd+UyECtejccaZv3LcvZTm9YDD22iCQ==}
@@ -2344,11 +2332,6 @@ snapshots:
       '@effect/schema': 0.74.1(effect@3.8.4)
       effect: 3.8.4
 
-  '@effect/schema@0.68.26(effect@3.5.6)':
-    dependencies:
-      effect: 3.5.6
-      fast-check: 3.20.0
-
   '@effect/schema@0.74.1(effect@3.8.4)':
     dependencies:
       effect: 3.8.4
@@ -3130,8 +3113,6 @@ snapshots:
 
   dotenv@16.4.5: {}
 
-  effect@3.5.6: {}
-
   effect@3.8.4: {}
 
   es6-promise@3.3.1: {}
@@ -3283,10 +3264,6 @@ snapshots:
       strip-final-newline: 3.0.0
 
   exit-hook@4.0.0: {}
-
-  fast-check@3.20.0:
-    dependencies:
-      pure-rand: 6.1.0
 
   fast-check@3.22.0:
     dependencies:
