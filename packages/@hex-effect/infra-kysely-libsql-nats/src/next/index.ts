@@ -32,9 +32,9 @@ const WTLive = Layer.effect(
         );
 
         return prog;
+      } else {
+        return Effect.dieMessage(`${isolationLevel} not supported`);
       }
-
-      return sql.withTransaction(eff).pipe(Effect.orDie);
     };
   })
 );

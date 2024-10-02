@@ -8,19 +8,20 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*"
+    "@repo/typescript-config": "workspace:*",
+    "testcontainers": "^10.13.1"
   },
   "type": "module",
   "peerDependencies": {
     "@effect/schema": ">=0.74",
-    "effect": ">=3.8",
-    "kysely": "~0.27.4",
     "@libsql/client": "~0.14.0",
+    "effect": ">=3.8",
     "nats": "^2.28.0"
   },
   "dependencies": {
-    "nanoid": "^5.0.7",
-    "@hex-effect/core": "workspace:*"
+    "@hex-effect/core": "workspace:*",
+    "@opentelemetry/semantic-conventions": "^1.27.0",
+    "nanoid": "^5.0.7"
   },
   "exports": {
     "node": {
