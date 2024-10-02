@@ -1,8 +1,11 @@
-import { SqlClient } from '@effect/sql';
+import { Model, SqlClient, SqlError } from '@effect/sql';
 import { LibsqlClient } from './libsql-client/index.js';
 import { describe, expect, layer } from '@effect/vitest';
-import { Console, Effect, Config, Context, Layer } from 'effect';
+import { Effect, Config, Context, Layer } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
+import { Schema, Serializable } from '@effect/schema';
+import { EventBaseSchema } from '@hex-effect/core';
+import { nanoid } from 'nanoid';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -33,15 +36,70 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   ).pipe(Layer.provide(this.Live));
 }
 
+const TestEventBase = Schema.Struct({
+  ...EventBaseSchema.fields,
+  _context: Schema.Literal('@test').pipe(
+    Schema.propertySignature,
+    Schema.withConstructorDefault(() => '@test' as const)
+  )
+});
+
+export class PersonCreatedEvent extends Schema.TaggedClass<PersonCreatedEvent>()(
+  'PersonCreatedEvent',
+  {
+    ...TestEventBase.fields,
+    id: Schema.String
+  }
+) {
+  get [Serializable.symbol]() {
+    return PersonCreatedEvent;
+  }
+}
+
+const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
+
+class PersonModel extends Model.Class<PersonModel>('PersonModel')({
+  id: Model.GeneratedByApp(PersonId),
+  name: Schema.Trim
+}) {}
+
+class SavePerson extends Context.Tag('test/SavePerson')<
+  SavePerson,
+  (person: typeof PersonModel.insert.Type) => Effect.Effect<void, SqlError.SqlError>
+>() {
+  public static live = Layer.effect(
+    this,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+
+      return (person) => {
+        return sql`insert into people ${sql.insert(person)};`;
+      };
+    })
+  );
+}
+
+const addPerson = (p: typeof PersonModel.jsonCreate.Type) =>
+  Effect.gen(function* () {
+    const person = yield* Schema.decode(PersonModel.insert)({ ...p, id: PersonId.make(nanoid()) });
+    const save = yield* SavePerson;
+    yield* save(person);
+    return [PersonCreatedEvent.make({ id: person.id })];
+  });
+
+const TestLive = SavePerson.live.pipe(Layer.provideMerge(LibsqlContainer.ClientLive));
+
 describe('kralf', () => {
-  layer(LibsqlContainer.ClientLive)((it) => {
+  layer(TestLive)((it) => {
     it.scoped('does a thing', () =>
       Effect.gen(function* () {
         const num = yield* Effect.succeed(4);
         expect(num).toEqual(4);
         const sql = yield* SqlClient.SqlClient;
-        const res = yield* sql`select * from sqlite_master;`;
-        yield* Console.log(res);
+        yield* sql`create table people (id text primary key not null, name text not null);`;
+        yield* addPerson({ name: 'Jeffrey ' });
+        const res = yield* sql`select * from people where name = ${'Jeffrey'};`;
+        expect(res.at(0)?.name).toEqual('Jeffrey');
       })
     );
   });

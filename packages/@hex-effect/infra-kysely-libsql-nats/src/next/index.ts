@@ -9,7 +9,7 @@ export class WriteThing extends Context.Tag('WriteThing')<
 >() {
   public static live = Layer.succeed(WriteThing, (stm) => stm);
 }
-
+// https://effect.website/play#7382a05e89d6
 const WTLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
