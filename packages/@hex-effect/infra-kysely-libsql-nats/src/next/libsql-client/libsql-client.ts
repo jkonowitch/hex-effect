@@ -34,6 +34,7 @@ export type TypeId = typeof TypeId;
 export interface LibsqlClient extends Client.SqlClient {
   readonly [TypeId]: TypeId;
   readonly config: LibsqlClientConfig;
+  readonly sdk: Libsql.Client;
 }
 
 /**
@@ -50,54 +51,49 @@ export type LibsqlClientConfig = {
   readonly spanAttributes?: Record<string, unknown> | undefined;
   readonly transformResultNames?: ((str: string) => string) | undefined;
   readonly transformQueryNames?: ((str: string) => string) | undefined;
-} & (
-  | {
-      _tag: 'Config';
-      /** The database URL.
-       *
-       * The client supports `libsql:`, `http:`/`https:`, `ws:`/`wss:` and `file:` URL. For more infomation,
-       * please refer to the project README:
-       *
-       * https://github.com/libsql/libsql-client-ts#supported-urls
-       */
-      readonly url: string;
-      /** Authentication token for the database. */
-      readonly authToken?: string | undefined;
-      /** Encryption key for the database. */
-      readonly encryptionKey?: string | undefined;
-      /** URL of a remote server to synchronize database with. */
-      readonly syncUrl?: string | undefined;
-      /** Sync interval in seconds. */
-      readonly syncInterval?: number | undefined;
-      /** Enables or disables TLS for `libsql:` URLs.
-       *
-       * By default, `libsql:` URLs use TLS. You can set this option to `false` to disable TLS.
-       */
-      readonly tls?: boolean | undefined;
-      /** How to convert SQLite integers to JavaScript values:
-       *
-       * - `"number"` (default): returns SQLite integers as JavaScript `number`-s (double precision floats).
-       * `number` cannot precisely represent integers larger than 2^53-1 in absolute value, so attempting to read
-       * larger integers will throw a `RangeError`.
-       * - `"bigint"`: returns SQLite integers as JavaScript `bigint`-s (arbitrary precision integers). Bigints can
-       * precisely represent all SQLite integers.
-       * - `"string"`: returns SQLite integers as strings.
-       */
-      readonly intMode?: 'number' | 'bigint' | 'string' | undefined;
-      /** Concurrency limit.
-       *
-       * By default, the client performs up to 20 concurrent requests. You can set this option to a higher
-       * number to increase the concurrency limit or set it to 0 to disable concurrency limits completely.
-       */
-      readonly concurrency?: number | undefined;
-    }
-  | {
-      _tag: 'LiveClient';
-      liveClient: Libsql.Client;
-    }
-);
+} & {
+  /** The database URL.
+   *
+   * The client supports `libsql:`, `http:`/`https:`, `ws:`/`wss:` and `file:` URL. For more infomation,
+   * please refer to the project README:
+   *
+   * https://github.com/libsql/libsql-client-ts#supported-urls
+   */
+  readonly url: string;
+  /** Authentication token for the database. */
+  readonly authToken?: string | undefined;
+  /** Encryption key for the database. */
+  readonly encryptionKey?: string | undefined;
+  /** URL of a remote server to synchronize database with. */
+  readonly syncUrl?: string | undefined;
+  /** Sync interval in seconds. */
+  readonly syncInterval?: number | undefined;
+  /** Enables or disables TLS for `libsql:` URLs.
+   *
+   * By default, `libsql:` URLs use TLS. You can set this option to `false` to disable TLS.
+   */
+  readonly tls?: boolean | undefined;
+  /** How to convert SQLite integers to JavaScript values:
+   *
+   * - `"number"` (default): returns SQLite integers as JavaScript `number`-s (double precision floats).
+   * `number` cannot precisely represent integers larger than 2^53-1 in absolute value, so attempting to read
+   * larger integers will throw a `RangeError`.
+   * - `"bigint"`: returns SQLite integers as JavaScript `bigint`-s (arbitrary precision integers). Bigints can
+   * precisely represent all SQLite integers.
+   * - `"string"`: returns SQLite integers as strings.
+   */
+  readonly intMode?: 'number' | 'bigint' | 'string' | undefined;
+  /** Concurrency limit.
+   *
+   * By default, the client performs up to 20 concurrent requests. You can set this option to a higher
+   * number to increase the concurrency limit or set it to 0 to disable concurrency limits completely.
+   */
+  readonly concurrency?: number | undefined;
+};
 
-interface LibsqlConnection extends Connection {}
+interface LibsqlConnection extends Connection {
+  sdk: Libsql.Client;
+}
 
 /**
  * @category constructor
@@ -110,19 +106,13 @@ export const make = (
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
     const transformRows = Statement.defaultTransforms(options.transformResultNames!).array;
     const makeConnection = Effect.gen(function* () {
-      let db: Libsql.Client;
-
-      if (options._tag === 'Config') {
-        db = Libsql.createClient(options as Libsql.Config);
-        yield* Effect.addFinalizer(() => Effect.sync(() => db.close()));
-      } else {
-        db = options.liveClient;
-      }
+      const sdk = Libsql.createClient(options as Libsql.Config);
+      yield* Effect.addFinalizer(() => Effect.sync(() => sdk.close()));
 
       const run = (sql: string, params: ReadonlyArray<Statement.Primitive> = []) =>
         Effect.tryPromise({
           try: () =>
-            db
+            sdk
               .execute({ sql, args: params as Array<Libsql.InValue> })
               .then((results) => results.rows),
           catch: (cause) => new SqlError({ cause, message: 'Failed to execute statement' })
@@ -130,7 +120,7 @@ export const make = (
 
       const runRaw = (sql: string, params: ReadonlyArray<Statement.Primitive> = []) =>
         Effect.tryPromise({
-          try: () => db.execute({ sql, args: params as Array<Libsql.InValue> }),
+          try: () => sdk.execute({ sql, args: params as Array<Libsql.InValue> }),
           catch: (cause) => new SqlError({ cause, message: 'Failed to execute statement' })
         });
 
@@ -161,7 +151,8 @@ export const make = (
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         executeStream(_sql, _params) {
           return Effect.dieMessage('executeStream not implemented');
-        }
+        },
+        sdk
       });
     });
 
@@ -182,7 +173,8 @@ export const make = (
       }) as LibsqlClient,
       {
         [TypeId]: TypeId as TypeId,
-        config: options
+        config: options,
+        sdk: connection.sdk
       }
     );
   });
