@@ -72,9 +72,7 @@ class SavePerson extends Context.Tag('test/SavePerson')<
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
-      return (person) => {
-        return sql`insert into people ${sql.insert(person)};`;
-      };
+      return (person) => sql`insert into people ${sql.insert(person)};`;
     })
   );
 }
@@ -87,7 +85,20 @@ const addPerson = (p: typeof PersonModel.jsonCreate.Type) =>
     return [PersonCreatedEvent.make({ id: person.id })];
   });
 
-const TestLive = SavePerson.live.pipe(Layer.provideMerge(LibsqlContainer.ClientLive));
+const TestLive = SavePerson.live.pipe(
+  Layer.provide(
+    Layer.scopedDiscard(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* Effect.acquireRelease(
+          sql`create table people (id text primary key not null, name text not null);`,
+          () => sql`drop table people;`.pipe(Effect.ignore)
+        );
+      })
+    )
+  ),
+  Layer.provideMerge(LibsqlContainer.ClientLive)
+);
 
 describe('kralf', () => {
   layer(TestLive)((it) => {
@@ -96,7 +107,6 @@ describe('kralf', () => {
         const num = yield* Effect.succeed(4);
         expect(num).toEqual(4);
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`create table people (id text primary key not null, name text not null);`;
         yield* addPerson({ name: 'Jeffrey ' });
         const res = yield* sql`select * from people where name = ${'Jeffrey'};`;
         expect(res.at(0)?.name).toEqual('Jeffrey');
