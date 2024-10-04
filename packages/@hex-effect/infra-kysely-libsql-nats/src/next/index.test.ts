@@ -101,12 +101,12 @@ describe('kralf', () => {
   layer(TestLive)((it) => {
     it.scoped('does a thing', () =>
       Effect.gen(function* () {
-        const num = yield* Effect.succeed(4);
-        expect(num).toEqual(4);
         const sql = yield* SqlClient.SqlClient;
-        yield* addPerson({ name: 'Jeffrey ' });
-        const res = yield* sql`select * from people where name = ${'Jeffrey'};`;
-        expect(res.at(0)?.name).toEqual('Jeffrey');
+        const events = yield* addPerson({ name: 'Jeffrey ' });
+        const res = yield* sql<{
+          name: string;
+        }>`select name from people where id = ${events.at(0)!.id};`;
+        expect(res.at(0)!.name).toEqual('Jeffrey');
       }).pipe(Effect.provide(Migrations))
     );
 
