@@ -5,7 +5,7 @@ import {
   type EventBaseType
 } from '@hex-effect/core';
 import { Context, Effect, Layer, Option, Ref } from 'effect';
-import { Model, type Statement } from '@effect/sql';
+import { type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { LibsqlClient } from './libsql-client/index.js';
 import type { InValue } from '@libsql/client';
@@ -37,17 +37,27 @@ const BoolFromNumber = Schema.transform(Schema.Number, Schema.Boolean, {
   encode: (toI) => (toI ? 1 : 0)
 });
 
-class EventModel extends Model.Class<EventModel>('EventModel')({
+const EventRecordInsert = Schema.Struct({
   messageId: Schema.String,
   occurredOn: Schema.DateFromNumber,
   delivered: BoolFromNumber,
   payload: Schema.String
-}) {}
+});
 
-class EventStore extends Context.Tag('@hex-effect/libsql/event-store')<
+const UnpublishedEventRecord = Schema.Struct({
+  ...EventRecordInsert.pick('messageId', 'payload').fields,
+  tag: Schema.String,
+  context: Schema.String
+});
+
+export class EventStore extends Context.Tag('@hex-effect/libsql/event-store')<
   EventStore,
   {
     save: (e: EventBaseType[]) => Effect.Effect<void, ParseError | SqlError>;
+    getUnpublished: Effect.Effect<
+      ReadonlyArray<typeof UnpublishedEventRecord.Type>,
+      ParseError | SqlError
+    >;
   }
 >() {
   public static live = Layer.effect(
@@ -71,7 +81,7 @@ class EventStore extends Context.Tag('@hex-effect/libsql/event-store')<
             (e) =>
               e.encode().pipe(
                 Effect.flatMap((e) =>
-                  Schema.encode(EventModel)({
+                  Schema.encode(EventRecordInsert)({
                     delivered: false,
                     messageId: e.messageId,
                     occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn),
@@ -83,7 +93,16 @@ class EventStore extends Context.Tag('@hex-effect/libsql/event-store')<
             {
               concurrency: 'unbounded'
             }
-          )
+          ),
+        getUnpublished: sql`SELECT
+            payload,
+            message_id,
+            json_extract(payload, '$._tag') AS tag,
+            json_extract(payload, '$._context') AS context
+          FROM hex_effect_events
+          WHERE delivered = 0;`.pipe(
+          Effect.andThen(Schema.decodeUnknown(Schema.Array(UnpublishedEventRecord)))
+        )
       };
     })
   );

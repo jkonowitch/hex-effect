@@ -7,7 +7,7 @@ import { Schema } from '@effect/schema';
 import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { WriteStatement, WTLive } from './index.js';
+import { EventStore, WriteStatement, WTLive } from './index.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -102,7 +102,7 @@ const addPerson = (name: string) =>
     const save = yield* SavePerson;
     yield* save(person);
     return [PersonCreatedEvent.make({ id: person.id })];
-  });
+  }).pipe(Effect.provide(SavePerson.live));
 
 const Migrations = Layer.scopedDiscard(
   Effect.gen(function* () {
@@ -113,9 +113,9 @@ const Migrations = Layer.scopedDiscard(
     );
   })
 );
-withNextTXBoundary(IsolationLevel.Batched)(addPerson('asd'));
+
 const TestLive = WTLive.pipe(
-  Layer.provideMerge(SavePerson.live),
+  Layer.provideMerge(EventStore.live),
   Layer.provideMerge(WriteStatement.live),
   Layer.provideMerge(LibsqlContainer.ClientLive)
 );
@@ -160,6 +160,10 @@ describe('WithTransaction', () => {
           name: string;
         }>`select * from people;`;
         expect(res.at(0)!.name).toEqual('Kralf');
+
+        const q = yield* EventStore;
+        const jawn = yield* q.getUnpublished;
+        console.log(jawn);
       }).pipe(Effect.provide(Migrations))
     );
 
