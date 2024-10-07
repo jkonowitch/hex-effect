@@ -4,9 +4,10 @@ import { describe, expect, layer } from '@effect/vitest';
 import { Effect, Config, Context, Layer, String, Console } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { Schema, Serializable } from '@effect/schema';
-import { EventBaseSchema } from '@hex-effect/core';
+import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
+import { WriteStatement, WTLive } from './index.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -80,12 +81,13 @@ class SavePerson extends Context.Tag('test/SavePerson')<
     this,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
+      const w = yield* WriteStatement;
       return (person) =>
         Effect.gen(function* () {
           const insert = yield* Schema.encode(PersonSQLModel.insert)(
             PersonSQLModel.insert.make(person)
           );
-          yield* sql`insert into people ${sql.insert(insert)};`;
+          yield* w(sql`insert into people ${sql.insert(insert)};`);
         });
     })
   );
@@ -112,11 +114,15 @@ const Migrations = Layer.scopedDiscard(
   })
 );
 
-const TestLive = SavePerson.live.pipe(Layer.provideMerge(LibsqlContainer.ClientLive));
+const TestLive = WTLive.pipe(
+  Layer.provideMerge(SavePerson.live),
+  Layer.provideMerge(WriteStatement.live),
+  Layer.provideMerge(LibsqlContainer.ClientLive)
+);
 
 describe('kralf', () => {
   layer(TestLive)((it) => {
-    it.scoped('does a thing', () =>
+    it.scoped('does a thing 1', () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const events = yield* addPerson('Jeffrey ');
@@ -128,11 +134,15 @@ describe('kralf', () => {
       }).pipe(Effect.provide(Migrations))
     );
 
-    it.scoped('does a thing', () =>
+    it.scoped('does a thing 2', () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        const res = yield* sql`SELECT count(*) as number from people;`;
-        expect(res.at(0)?.number).toEqual(0);
+        yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Batched));
+        const res = yield* sql<{
+          name: string;
+        }>`select * from people;`;
+        yield* Console.log(res);
+        expect(res.at(0)!.name).toEqual('Kralf');
       }).pipe(Effect.provide(Migrations))
     );
   });

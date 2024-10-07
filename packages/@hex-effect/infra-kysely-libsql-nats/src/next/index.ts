@@ -1,16 +1,29 @@
 import { IsolationLevel, WithTransaction } from '@hex-effect/core';
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Effect, Layer, Option, Ref } from 'effect';
 import type { Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { LibsqlClient } from './libsql-client/index.js';
 import type { InValue } from '@libsql/client';
 
-export class WriteThing extends Context.Tag('WriteThing')<
-  WriteThing,
+class WriteExecutor extends Context.Tag('WriteExecutor')<
+  WriteExecutor,
   (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
 >() {
-  public static live = Layer.succeed(WriteThing, (stm) => stm);
+  public static live = Layer.succeed(this, (stm) => stm);
 }
+
+export class WriteStatement extends Context.Tag('WriteStatement')<
+  WriteStatement,
+  (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
+>() {
+  public static live = Layer.succeed(WriteStatement, (stm) =>
+    Effect.serviceOption(WriteExecutor).pipe(
+      Effect.map(Option.getOrThrowWith(() => new Error('WriteExecutor not initialized'))),
+      Effect.andThen((wr) => wr(stm))
+    )
+  ).pipe(Layer.provideMerge(WriteExecutor.live));
+}
+
 // https://effect.website/play#7382a05e89d6
 export const WTLive = Layer.effect(
   WithTransaction,
@@ -21,7 +34,7 @@ export const WTLive = Layer.effect(
       if (isolationLevel === IsolationLevel.Batched) {
         const prog = Effect.gen(function* () {
           const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
-          const results = yield* Effect.provideService(eff, WriteThing, (stm) =>
+          const results = yield* Effect.provideService(eff, WriteExecutor, (stm) =>
             Ref.update(ref, (a) => [...a, stm])
           );
           const writes = yield* Ref.get(ref);
@@ -36,6 +49,7 @@ export const WTLive = Layer.effect(
               })
             )
           );
+          console.log(writes);
           return results;
         });
 
