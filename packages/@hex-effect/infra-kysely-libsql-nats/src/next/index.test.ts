@@ -40,7 +40,7 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
 }
 
 const TestEventBase = Schema.Struct({
-  ...EventBaseSchema.fields,
+  ...EventBaseSchema.omit('_context', '_tag').fields,
   _context: Schema.Literal('@test').pipe(
     Schema.propertySignature,
     Schema.withConstructorDefault(() => '@test' as const)
@@ -113,7 +113,7 @@ const Migrations = Layer.scopedDiscard(
     );
   })
 );
-
+withNextTXBoundary(IsolationLevel.Batched)(addPerson('asd'));
 const TestLive = WTLive.pipe(
   Layer.provideMerge(SavePerson.live),
   Layer.provideMerge(WriteStatement.live),

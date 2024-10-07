@@ -4,10 +4,11 @@ import { Context, Data, Effect, Fiber, Layer, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 /**
- * All events must extend from this base, and are expected to have a `_tag` as well (see `EventBaseType`)
+ * All events must extend from this base
  */
 export const EventBaseSchema = Schema.Struct({
   _context: Schema.String,
+  _tag: Schema.String,
   occurredOn: Schema.Date.pipe(
     Schema.propertySignature,
     Schema.withConstructorDefault(() => new Date())
@@ -18,7 +19,7 @@ export const EventBaseSchema = Schema.Struct({
   )
 });
 
-export type EventBaseType = typeof EventBaseSchema.Type & { _tag: string } & {
+export type EventBaseType = typeof EventBaseSchema.Type & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly [symbol]: Schema.Schema<any, any, never>;
 };
