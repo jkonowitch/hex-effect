@@ -1,5 +1,5 @@
 import { Schema } from '@effect/schema';
-import type { symbol } from '@effect/schema/Serializable';
+import type { ParseError } from '@effect/schema/ParseResult';
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
@@ -20,8 +20,7 @@ export const EventBaseSchema = Schema.Struct({
 });
 
 export type EventBaseType = typeof EventBaseSchema.Type & {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly [symbol]: Schema.Schema<any, any, never>;
+  encode: () => Effect.Effect<typeof EventBaseSchema.Encoded, ParseError, never>;
 };
 
 /**

@@ -3,7 +3,7 @@ import { LibsqlClient } from './libsql-client/index.js';
 import { describe, expect, layer } from '@effect/vitest';
 import { Effect, Config, Context, Layer, String } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
-import { Schema, Serializable } from '@effect/schema';
+import { Schema } from '@effect/schema';
 import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
@@ -54,8 +54,8 @@ export class PersonCreatedEvent extends Schema.TaggedClass<PersonCreatedEvent>()
     id: Schema.String
   }
 ) {
-  get [Serializable.symbol]() {
-    return PersonCreatedEvent;
+  encode() {
+    return Schema.encode(PersonCreatedEvent)(this);
   }
 }
 
