@@ -1,7 +1,7 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { LibsqlClient } from './libsql-client/index.js';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Context, Layer, String, Console } from 'effect';
+import { Effect, Config, Context, Layer, String } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { Schema, Serializable } from '@effect/schema';
 import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
@@ -120,28 +120,56 @@ const TestLive = WTLive.pipe(
   Layer.provideMerge(LibsqlContainer.ClientLive)
 );
 
-describe('kralf', () => {
+describe('WithTransaction', () => {
   layer(TestLive)((it) => {
-    it.scoped('does a thing 1', () =>
+    it.scoped('rolls back serializable', () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        const events = yield* addPerson('Jeffrey ');
+        yield* addPerson('Jeffrey ').pipe(
+          Effect.andThen(Effect.fail('boom')),
+          withNextTXBoundary(IsolationLevel.Serializable),
+          Effect.ignore
+        );
         const res = yield* sql<{
-          name: string;
-        }>`select * from people where id = ${events.at(0)!.id};`;
-        yield* Console.log(res);
-        expect(res.at(0)!.name).toEqual('Jeffrey');
+          count: number;
+        }>`select count(*) as count from people;`;
+        expect(res.at(0)!.count).toEqual(0);
       }).pipe(Effect.provide(Migrations))
     );
 
-    it.scoped('does a thing 2', () =>
+    it.scoped('rolls back batched', () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* addPerson('Jeffrey ').pipe(
+          Effect.andThen(Effect.fail('boom')),
+          withNextTXBoundary(IsolationLevel.Batched),
+          Effect.ignore
+        );
+        const res = yield* sql<{
+          count: number;
+        }>`select count(*) as count from people;`;
+        expect(res.at(0)!.count).toEqual(0);
+      }).pipe(Effect.provide(Migrations))
+    );
+
+    it.scoped('commits batched', () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Batched));
         const res = yield* sql<{
           name: string;
         }>`select * from people;`;
-        yield* Console.log(res);
+        expect(res.at(0)!.name).toEqual('Kralf');
+      }).pipe(Effect.provide(Migrations))
+    );
+
+    it.scoped('commits serializable', () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Serializable));
+        const res = yield* sql<{
+          name: string;
+        }>`select * from people;`;
         expect(res.at(0)!.name).toEqual('Kralf');
       }).pipe(Effect.provide(Migrations))
     );
