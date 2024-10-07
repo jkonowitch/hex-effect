@@ -1,6 +1,6 @@
 import { Schema } from '@effect/schema';
 import type { symbol } from '@effect/schema/Serializable';
-import { Context, Effect, Fiber, Layer, PubSub, Scope } from 'effect';
+import { Context, Data, Effect, Fiber, Layer, PubSub, Scope } from 'effect';
 import { nanoid } from 'nanoid';
 
 /**
@@ -18,7 +18,7 @@ export const EventBaseSchema = Schema.Struct({
   )
 });
 
-type EventBaseType = typeof EventBaseSchema.Type & { _tag: string } & {
+export type EventBaseType = typeof EventBaseSchema.Type & { _tag: string } & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly [symbol]: Schema.Schema<any, any, never>;
 };
@@ -106,18 +106,22 @@ export function withTransactionalBoundary(level: IsolationLevel) {
     });
 }
 
+export class TransactionError extends Data.TaggedError('@hex-effect/TransactionError')<{
+  cause: unknown;
+}> {}
+
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
   <A extends EventBaseType[], E, R>(
     eff: Effect.Effect<A, E, R>,
     isolationLevel: IsolationLevel
-  ) => Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E | TransactionError, R>
 >() {}
 
 export function withNextTXBoundary(level: IsolationLevel) {
   return <A extends EventBaseType[], E, R>(
     useCase: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, WithTransaction | R> =>
+  ): Effect.Effect<A, E | TransactionError, WithTransaction | R> =>
     Effect.gen(function* () {
       const withTx = yield* WithTransaction;
       const events = yield* withTx(useCase, level);

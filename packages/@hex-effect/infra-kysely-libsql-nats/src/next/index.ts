@@ -1,4 +1,9 @@
-import { IsolationLevel, WithTransaction } from '@hex-effect/core';
+import {
+  IsolationLevel,
+  TransactionError,
+  WithTransaction,
+  type EventBaseType
+} from '@hex-effect/core';
 import { Context, Effect, Layer, Option, Ref } from 'effect';
 import type { Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
@@ -24,13 +29,15 @@ export class WriteStatement extends Context.Tag('WriteStatement')<
   ).pipe(Layer.provideMerge(WriteExecutor.live));
 }
 
-// https://effect.website/play#7382a05e89d6
 export const WTLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
     const client = yield* LibsqlClient.LibsqlClient;
 
-    return <A, E, R>(eff: Effect.Effect<A, E, R>, isolationLevel: IsolationLevel) => {
+    return <A extends EventBaseType[], E, R>(
+      eff: Effect.Effect<A, E, R>,
+      isolationLevel: IsolationLevel
+    ) => {
       if (isolationLevel === IsolationLevel.Batched) {
         const prog = Effect.gen(function* () {
           const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
@@ -38,22 +45,28 @@ export const WTLive = Layer.effect(
             Ref.update(ref, (a) => [...a, stm])
           );
           const writes = yield* Ref.get(ref);
-          yield* Effect.promise(() =>
-            client.sdk.batch(
-              writes.map((w) => {
-                const [sql, args] = w.compile();
-                return {
-                  args: args as Array<InValue>,
-                  sql: sql
-                };
-              })
-            )
-          );
-          console.log(writes);
+          yield* Effect.tryPromise({
+            try: () =>
+              client.sdk.batch(
+                writes.map((w) => {
+                  const [sql, args] = w.compile();
+                  return {
+                    args: args as Array<InValue>,
+                    sql: sql
+                  };
+                })
+              ),
+            catch: (e) => new TransactionError({ cause: e })
+          });
           return results;
         });
 
         return prog;
+      } else if (isolationLevel === IsolationLevel.Serializable) {
+        return eff.pipe(
+          client.withTransaction,
+          Effect.catchTag('SqlError', (e) => Effect.fail(new TransactionError({ cause: e })))
+        );
       } else {
         return Effect.dieMessage(`${isolationLevel} not supported`);
       }
