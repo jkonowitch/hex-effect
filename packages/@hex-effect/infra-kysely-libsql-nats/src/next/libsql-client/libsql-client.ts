@@ -11,9 +11,11 @@ import * as Config from 'effect/Config';
 import type { ConfigError } from 'effect/ConfigError';
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
-import { identity } from 'effect/Function';
+import * as Exit from 'effect/Exit';
+import { identity, pipe } from 'effect/Function';
 import * as Layer from 'effect/Layer';
-import type * as Scope from 'effect/Scope';
+import * as Option from 'effect/Option';
+import * as Scope from 'effect/Scope';
 
 /**
  * @category type ids
@@ -44,14 +46,18 @@ export interface LibsqlClient extends Client.SqlClient {
 export const LibsqlClient = Context.GenericTag<LibsqlClient>('@effect/sql-libsql/LibsqlClient');
 
 /**
+ * @category tags
+ * @since 1.0.0
+ */
+const LibsqlTransaction = Context.GenericTag<readonly [Libsql.Transaction, counter: number]>(
+  '@effect/sql-libsql/LibsqlTransaction'
+);
+
+/**
  * @category models
  * @since 1.0.0
  */
-export type LibsqlClientConfig = {
-  readonly spanAttributes?: Record<string, unknown> | undefined;
-  readonly transformResultNames?: ((str: string) => string) | undefined;
-  readonly transformQueryNames?: ((str: string) => string) | undefined;
-} & {
+export interface LibsqlClientConfig {
   /** The database URL.
    *
    * The client supports `libsql:`, `http:`/`https:`, `ws:`/`wss:` and `file:` URL. For more infomation,
@@ -89,10 +95,15 @@ export type LibsqlClientConfig = {
    * number to increase the concurrency limit or set it to 0 to disable concurrency limits completely.
    */
   readonly concurrency?: number | undefined;
-};
+
+  readonly spanAttributes?: Record<string, unknown> | undefined;
+
+  readonly transformResultNames?: ((str: string) => string) | undefined;
+  readonly transformQueryNames?: ((str: string) => string) | undefined;
+}
 
 interface LibsqlConnection extends Connection {
-  sdk: Libsql.Client;
+  readonly sdk: Libsql.Client;
 }
 
 /**
@@ -105,24 +116,38 @@ export const make = (
   Effect.gen(function* () {
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
     const transformRows = Statement.defaultTransforms(options.transformResultNames!).array;
+
     const makeConnection = Effect.gen(function* () {
-      const sdk = Libsql.createClient(options as Libsql.Config);
+      const sdk = yield* Effect.sync(() => Libsql.createClient(options as Libsql.Config));
       yield* Effect.addFinalizer(() => Effect.sync(() => sdk.close()));
 
+      const getExecutor = Effect.serviceOption(LibsqlTransaction).pipe(
+        Effect.map(Option.map(([tx]) => tx)),
+        Effect.map(Option.getOrElse(() => sdk))
+      );
+
       const run = (sql: string, params: ReadonlyArray<Statement.Primitive> = []) =>
-        Effect.tryPromise({
-          try: () =>
-            sdk
-              .execute({ sql, args: params as Array<Libsql.InValue> })
-              .then((results) => results.rows),
-          catch: (cause) => new SqlError({ cause, message: 'Failed to execute statement' })
-        });
+        getExecutor.pipe(
+          Effect.flatMap((conn) =>
+            Effect.tryPromise({
+              try: () =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                conn.execute({ sql, args: params as Array<any> }).then((results) => results.rows),
+              catch: (cause) => new SqlError({ cause, message: 'Failed to execute statement' })
+            })
+          )
+        );
 
       const runRaw = (sql: string, params: ReadonlyArray<Statement.Primitive> = []) =>
-        Effect.tryPromise({
-          try: () => sdk.execute({ sql, args: params as Array<Libsql.InValue> }),
-          catch: (cause) => new SqlError({ cause, message: 'Failed to execute statement' })
-        });
+        getExecutor.pipe(
+          Effect.flatMap((conn) =>
+            Effect.tryPromise({
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              try: () => conn.execute({ sql, args: params as Array<any> }),
+              catch: (cause) => new SqlError({ cause, message: 'Failed to execute statement' })
+            })
+          )
+        );
 
       const runTransform = options.transformResultNames
         ? (sql: string, params?: ReadonlyArray<Statement.Primitive>) =>
@@ -148,8 +173,7 @@ export const make = (
         executeUnprepared(sql, params) {
           return run(sql, params);
         },
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        executeStream(_sql, _params) {
+        executeStream() {
           return Effect.dieMessage('executeStream not implemented');
         },
         sdk
@@ -158,22 +182,74 @@ export const make = (
 
     const connection = yield* makeConnection;
 
-    const acquirer = Effect.succeed(connection);
-    const transactionAcquirer = Effect.dieMessage('transactions are not supported in libsql');
+    const semaphore = yield* Effect.makeSemaphore(1);
+
+    const transactionAcquirer = Effect.uninterruptibleMask((restore) =>
+      Effect.as(
+        Effect.zipRight(
+          restore(semaphore.take(1)),
+          Effect.tap(Effect.scope, (scope) => Scope.addFinalizer(scope, semaphore.release(1)))
+        ),
+        connection
+      )
+    );
+    const makeRootTx: Effect.Effect<
+      readonly [Scope.CloseableScope | undefined, Libsql.Transaction, number],
+      SqlError
+    > = Effect.flatMap(Scope.make(), (scope) =>
+      Effect.flatMap(Scope.extend(transactionAcquirer, scope), (conn) =>
+        Effect.gen(function* () {
+          const tx = yield* Effect.promise(() => conn.sdk.transaction('write'));
+          return [scope, tx, 0] as const;
+        })
+      )
+    );
+
+    const withTransaction = <R, E, A>(
+      effect: Effect.Effect<A, E, R>
+    ): Effect.Effect<A, E | SqlError, R> =>
+      Effect.acquireUseRelease(
+        pipe(
+          Effect.serviceOption(LibsqlTransaction),
+          Effect.flatMap(
+            Option.match({
+              onNone: () => makeRootTx,
+              onSome: ([conn, count]) => Effect.succeed([undefined, conn, count + 1] as const)
+            })
+          ),
+          Effect.tap(([, conn, id]) =>
+            id > 0 ? Effect.promise(() => conn.execute(`SAVEPOINT effect_sql_${id};`)) : conn
+          )
+        ),
+        ([, conn, id]) => Effect.provideService(effect, LibsqlTransaction, [conn, id]),
+        ([scope, conn, id], exit) => {
+          const effect = Exit.isSuccess(exit)
+            ? id > 0
+              ? Effect.void
+              : Effect.orDie(Effect.promise(() => conn.commit()))
+            : Effect.orDie(
+                Effect.promise<void | Libsql.ResultSet>(() =>
+                  id > 0 ? conn.execute(`ROLLBACK TO effect_sql_${id}`) : conn.rollback()
+                )
+              );
+          return scope !== undefined ? Effect.ensuring(effect, Scope.close(scope, exit)) : effect;
+        }
+      );
 
     return Object.assign(
       Client.make({
-        acquirer,
+        acquirer: Effect.succeed(connection),
         compiler,
         transactionAcquirer,
         spanAttributes: [
           ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
           [Otel.SEMATTRS_DB_SYSTEM, Otel.DBSYSTEMVALUES_SQLITE]
         ]
-      }) as LibsqlClient,
+      }),
       {
         [TypeId]: TypeId as TypeId,
         config: options,
+        withTransaction,
         sdk: connection.sdk
       }
     );
