@@ -78,7 +78,7 @@ class EventStore extends Context.Tag('@hex-effect/libsql/event-store')<
                     payload: JSON.stringify(e)
                   })
                 ),
-                Effect.tap((e) => writer(sql`insert into events ${sql.insert(e)};`))
+                Effect.tap((e) => writer(sql`insert into hex_effect_events ${sql.insert(e)};`))
               ),
             {
               concurrency: 'unbounded'
@@ -93,15 +93,20 @@ export const WTLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
     const client = yield* LibsqlClient.LibsqlClient;
-
+    const j = yield* EventStore;
     return <A extends EventBaseType[], E, R>(
       eff: Effect.Effect<A, E, R>,
       isolationLevel: IsolationLevel
     ) => {
+      const shmee = eff.pipe(
+        Effect.tap((e) => j.save(e)),
+        Effect.catchAll((e) => Effect.fail(new TransactionError({ cause: e })))
+      );
+
       if (isolationLevel === IsolationLevel.Batched) {
         const prog = Effect.gen(function* () {
           const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
-          const results = yield* Effect.provideService(eff, WriteExecutor, (stm) =>
+          const results = yield* Effect.provideService(shmee, WriteExecutor, (stm) =>
             Ref.update(ref, (a) => [...a, stm])
           );
           const writes = yield* Ref.get(ref);
@@ -123,7 +128,7 @@ export const WTLive = Layer.effect(
 
         return prog;
       } else if (isolationLevel === IsolationLevel.Serializable) {
-        return eff.pipe(
+        return shmee.pipe(
           client.withTransaction,
           Effect.catchTag('SqlError', (e) => Effect.fail(new TransactionError({ cause: e })))
         );
