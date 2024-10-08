@@ -5,7 +5,7 @@ import {
   type NatsConnection,
   NatsError as RawNatsError
 } from '@nats-io/transport-node';
-import { jetstream } from '@nats-io/jetstream';
+import { jetstream, jetstreamManager, RetentionPolicy } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
 import { EventBaseSchema } from '@hex-effect/core';
 import type { UnpublishedEventRecord } from './index.js';
@@ -15,6 +15,9 @@ import { constVoid } from 'effect/Function';
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
     return e instanceof RawNatsError;
+  }
+  get message() {
+    return `${this.raw.message}\n${this.raw.stack}`;
   }
 }
 
