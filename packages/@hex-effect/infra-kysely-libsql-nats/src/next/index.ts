@@ -138,8 +138,10 @@ export const WTLive = Layer.effect(
         Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
       );
 
+      let program: Effect.Effect<A, E | TransactionError, R>;
+
       if (isolationLevel === IsolationLevel.Batched) {
-        return Effect.gen(function* () {
+        program = Effect.gen(function* () {
           const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
           const results = yield* Effect.provideService(
             useCaseWithEventStorage,
@@ -163,13 +165,15 @@ export const WTLive = Layer.effect(
           return results;
         });
       } else if (isolationLevel === IsolationLevel.Serializable) {
-        return useCaseWithEventStorage.pipe(
+        program = useCaseWithEventStorage.pipe(
           client.withTransaction,
-          Effect.catchTag('SqlError', (e) => Effect.fail(new TransactionError({ cause: e })))
+          Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
         );
       } else {
         return Effect.dieMessage(`${isolationLevel} not supported`);
       }
+
+      return program;
     };
   })
 );
