@@ -1,13 +1,19 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { LibsqlClient } from './libsql-client/index.js';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Context, Layer, String, identity } from 'effect';
+import { Effect, Config, Context, Layer, String, identity, Stream, Fiber } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { Schema } from '@effect/schema';
 import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { EventStoreLive, GetUnpublishedEvents, WriteStatement, WTLive } from './index.js';
+import {
+  EventStoreLive,
+  GetUnpublishedEvents,
+  UseCaseCommit,
+  WriteStatement,
+  WithTransactionLive
+} from './index.js';
 import { get } from 'effect/Struct';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
@@ -137,16 +143,24 @@ const Migrations = Layer.scopedDiscard(
   })
 );
 
-const TestLive = WTLive.pipe(
-  Layer.provideMerge(EventStoreLive),
-  Layer.provideMerge(WriteStatement.live),
-  Layer.provideMerge(LibsqlContainer.ClientLive)
+const TestLive = Layer.mergeAll(
+  Migrations,
+  WithTransactionLive.pipe(
+    Layer.provideMerge(UseCaseCommit.live),
+    Layer.provideMerge(EventStoreLive),
+    Layer.provideMerge(WriteStatement.live)
+  )
 );
 
 describe('WithTransaction', () => {
-  layer(TestLive)((it) => {
+  layer(LibsqlContainer.ClientLive)((it) => {
+    const countCommits = Effect.serviceConstants(UseCaseCommit).subscribe.pipe(
+      Effect.andThen((queue) => Stream.fromQueue(queue).pipe(Stream.runCount, Effect.fork))
+    );
+
     it.scoped('rolls back serializable', () =>
       Effect.gen(function* () {
+        const count = yield* countCommits;
         const sql = yield* SqlClient.SqlClient;
         yield* addPerson('Jeffrey ').pipe(
           Effect.andThen(Effect.fail('boom')),
@@ -157,11 +171,14 @@ describe('WithTransaction', () => {
           count: number;
         }>`select count(*) as count from people;`;
         expect(res.at(0)!.count).toEqual(0);
-      }).pipe(Effect.provide(Migrations))
+        yield* Effect.serviceConstants(UseCaseCommit).shutdown;
+        expect(yield* Fiber.join(count)).toEqual(0);
+      }).pipe(Effect.provide(TestLive))
     );
 
     it.scoped('rolls back batched', () =>
       Effect.gen(function* () {
+        const count = yield* countCommits;
         const sql = yield* SqlClient.SqlClient;
         yield* addPerson('Jeffrey ').pipe(
           Effect.andThen(Effect.fail('boom')),
@@ -172,11 +189,14 @@ describe('WithTransaction', () => {
           count: number;
         }>`select count(*) as count from people;`;
         expect(res.at(0)!.count).toEqual(0);
-      }).pipe(Effect.provide(Migrations))
+        yield* Effect.serviceConstants(UseCaseCommit).shutdown;
+        expect(yield* Fiber.join(count)).toEqual(0);
+      }).pipe(Effect.provide(TestLive))
     );
 
     it.scoped('commits batched', () =>
       Effect.gen(function* () {
+        const count = yield* countCommits;
         const sql = yield* SqlClient.SqlClient;
         const [event] = yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Batched));
         const res = yield* sql<{
@@ -187,11 +207,14 @@ describe('WithTransaction', () => {
         expect(
           Schema.decodeUnknownSync(PersonCreatedEvent)(JSON.parse(events.at(0)!.payload))
         ).toEqual(event);
-      }).pipe(Effect.provide(Migrations))
+        yield* Effect.serviceConstants(UseCaseCommit).shutdown;
+        expect(yield* Fiber.join(count)).toEqual(1);
+      }).pipe(Effect.provide(TestLive))
     );
 
     it.scoped('commits serializable', () =>
       Effect.gen(function* () {
+        const count = yield* countCommits;
         const sql = yield* SqlClient.SqlClient;
         const [event] = yield* addPerson('Kralf').pipe(
           withNextTXBoundary(IsolationLevel.Serializable)
@@ -204,7 +227,9 @@ describe('WithTransaction', () => {
         expect(
           Schema.decodeUnknownSync(PersonCreatedEvent)(JSON.parse(events.at(0)!.payload))
         ).toEqual(event);
-      }).pipe(Effect.provide(Migrations))
+        yield* Effect.serviceConstants(UseCaseCommit).shutdown;
+        expect(yield* Fiber.join(count)).toEqual(1);
+      }).pipe(Effect.provide(TestLive))
     );
   });
 });

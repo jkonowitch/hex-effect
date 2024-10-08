@@ -5,7 +5,7 @@ import {
   WithTransaction,
   type EventBaseType
 } from '@hex-effect/core';
-import { Context, Effect, Layer, Option, Ref } from 'effect';
+import { Context, Effect, Layer, Option, PubSub, Ref } from 'effect';
 import { SqlClient, type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { LibsqlClient } from './libsql-client/index.js';
@@ -124,11 +124,12 @@ export const EventStoreLive = Layer.unwrapEffect(
 
 const isTaggedError = (e: unknown) => isTagged(e, 'SqlError') || isTagged(e, 'ParseError');
 
-export const WTLive = Layer.effect(
+export const WithTransactionLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
     const client = yield* LibsqlClient.LibsqlClient;
     const save = yield* SaveEvents;
+    const pub = yield* UseCaseCommit;
     return <A extends EventBaseType[], E, R>(
       useCase: Effect.Effect<A, E, R>,
       isolationLevel: IsolationLevel
@@ -173,7 +174,14 @@ export const WTLive = Layer.effect(
         return Effect.dieMessage(`${isolationLevel} not supported`);
       }
 
-      return program;
+      return program.pipe(Effect.tap(() => pub.publish()));
     };
   })
 );
+
+export class UseCaseCommit extends Context.Tag('@hex-effect/UseCaseCommit')<
+  UseCaseCommit,
+  PubSub.PubSub<void>
+>() {
+  public static live = Layer.effect(UseCaseCommit, PubSub.sliding<void>(10));
+}
