@@ -1,13 +1,13 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { LibsqlClient } from './libsql-client/index.js';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Context, Layer, String } from 'effect';
+import { Effect, Config, Context, Layer, String, identity } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { Schema } from '@effect/schema';
 import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { EventStore, WriteStatement, WTLive } from './index.js';
+import { EventStoreLive, GetUnpublishedEvents, WriteStatement, WTLive } from './index.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -106,16 +106,31 @@ const addPerson = (name: string) =>
 
 const Migrations = Layer.scopedDiscard(
   Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
+    const sql = yield* LibsqlClient.LibsqlClient;
     yield* Effect.acquireRelease(
       sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-      () => sql`drop table people;`.pipe(Effect.ignore)
+      () =>
+        Effect.gen(function* () {
+          const a = yield* sql<{
+            cmd: string;
+          }>`SELECT 'DROP TABLE ' || name || ';' as cmd FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'hex_effect_events';`.pipe(
+            Effect.orDie
+          );
+          yield* Effect.promise(() =>
+            sql.sdk.migrate([
+              `PRAGMA foreign_keys=OFF;`,
+              ...a.map((c) => c.cmd),
+              `DELETE FROM hex_effect_events`,
+              `PRAGMA foreign_keys=ON;`
+            ])
+          );
+        })
     );
   })
 );
 
 const TestLive = WTLive.pipe(
-  Layer.provideMerge(EventStore.live),
+  Layer.provideMerge(EventStoreLive),
   Layer.provideMerge(WriteStatement.live),
   Layer.provideMerge(LibsqlContainer.ClientLive)
 );
@@ -155,26 +170,32 @@ describe('WithTransaction', () => {
     it.scoped('commits batched', () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Batched));
+        const [event] = yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Batched));
         const res = yield* sql<{
           name: string;
         }>`select * from people;`;
         expect(res.at(0)!.name).toEqual('Kralf');
-
-        const q = yield* EventStore;
-        const jawn = yield* q.getUnpublished;
-        console.log(jawn);
+        const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
+        expect(
+          Schema.decodeUnknownSync(PersonCreatedEvent)(JSON.parse(events.at(0)!.payload))
+        ).toEqual(event);
       }).pipe(Effect.provide(Migrations))
     );
 
     it.scoped('commits serializable', () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Serializable));
+        const [event] = yield* addPerson('Kralf').pipe(
+          withNextTXBoundary(IsolationLevel.Serializable)
+        );
         const res = yield* sql<{
           name: string;
         }>`select * from people;`;
         expect(res.at(0)!.name).toEqual('Kralf');
+        const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
+        expect(
+          Schema.decodeUnknownSync(PersonCreatedEvent)(JSON.parse(events.at(0)!.payload))
+        ).toEqual(event);
       }).pipe(Effect.provide(Migrations))
     );
   });
