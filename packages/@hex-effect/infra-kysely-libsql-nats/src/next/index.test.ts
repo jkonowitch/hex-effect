@@ -8,6 +8,7 @@ import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
 import { EventStoreLive, GetUnpublishedEvents, WriteStatement, WTLive } from './index.js';
+import { get } from 'effect/Struct';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -107,25 +108,32 @@ const addPerson = (name: string) =>
 const Migrations = Layer.scopedDiscard(
   Effect.gen(function* () {
     const sql = yield* LibsqlClient.LibsqlClient;
-    yield* Effect.acquireRelease(
-      sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`,
-      () =>
-        Effect.gen(function* () {
-          const a = yield* sql<{
-            cmd: string;
-          }>`SELECT 'DROP TABLE ' || name || ';' as cmd FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'hex_effect_events';`.pipe(
-            Effect.orDie
-          );
-          yield* Effect.promise(() =>
-            sql.sdk.migrate([
-              `PRAGMA foreign_keys=OFF;`,
-              ...a.map((c) => c.cmd),
-              `DELETE FROM hex_effect_events`,
-              `PRAGMA foreign_keys=ON;`
-            ])
-          );
-        })
-    );
+
+    const migrateDatabase = sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
+
+    const resetDatabase = Effect.gen(function* () {
+      const dropTableCmds = yield* sql<{
+        cmd: string;
+      }>`SELECT 'DROP TABLE ' || name || ';' as cmd FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'hex_effect_events';`;
+      const dropTriggerCmds = yield* sql<{
+        cmd: string;
+      }>`SELECT 'DROP TRIGGER IF EXISTS ' || name || ';' as cmd FROM sqlite_master WHERE type='trigger';`;
+      const dropIndexCmds = yield* sql<{
+        cmd: string;
+      }>`SELECT 'DROP INDEX IF EXISTS ' || name || ';'as cmd FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'hex_effect_%';`;
+      yield* Effect.promise(() =>
+        sql.sdk.migrate([
+          `PRAGMA foreign_keys=OFF;`,
+          ...dropTriggerCmds.map(get('cmd')),
+          ...dropIndexCmds.map(get('cmd')),
+          ...dropTableCmds.map(get('cmd')),
+          `DELETE FROM hex_effect_events`,
+          `PRAGMA foreign_keys=ON;`
+        ])
+      );
+    }).pipe(Effect.orDie);
+
+    yield* Effect.acquireRelease(migrateDatabase, () => resetDatabase);
   })
 );
 
