@@ -61,7 +61,10 @@ export class ApplicationNamespace extends Schema.Class<ApplicationNamespace>(
   }
 }
 
-class NatsClient extends Context.Tag('@hex-effect/nats-client')<NatsClient, NatsConnection>() {
+export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
+  NatsClient,
+  NatsConnection
+>() {
   public static layer = (config: Config.Config.Wrap<ConnectionOptions>) =>
     Layer.scoped(
       this,
