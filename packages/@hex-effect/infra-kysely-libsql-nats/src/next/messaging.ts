@@ -27,8 +27,21 @@ const callNats = <T>(operation: Promise<T>) =>
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-export class ForwardEvent extends Context.Tag('@hex-effect/ForwardEvent')<
-  ForwardEvent,
+const ensureJetstream = (app: ApplicationNamespace) =>
+  Effect.gen(function* () {
+    const conn = yield* NatsClient;
+    const jsm = yield* Effect.promise(() => jetstreamManager(conn));
+    yield* callNats(
+      jsm.streams.add({
+        name: app.AppNamespace,
+        subjects: [`${app.AppNamespace}.>`],
+        retention: RetentionPolicy.Interest
+      })
+    );
+  });
+
+export class PublishEvent extends Context.Tag('@hex-effect/PublishEvent')<
+  PublishEvent,
   (e: typeof UnpublishedEventRecord.Type) => Effect.Effect<void, NatsError>
 >() {
   public static layer = (app: ApplicationNamespace) =>
@@ -37,20 +50,15 @@ export class ForwardEvent extends Context.Tag('@hex-effect/ForwardEvent')<
       Effect.gen(function* () {
         const conn = yield* NatsClient;
         const js = jetstream(conn);
+        yield* ensureJetstream(app);
+
         return (e) =>
-          callNats(js.publish(app.asSubject(e), e.payload, { msgID: e.messageId })).pipe(
-            Effect.map(constVoid)
-          );
+          callNats(
+            js.publish(app.asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 })
+          ).pipe(Effect.map(constVoid));
       })
     );
 }
-// const stream = yield* Effect.promise(() =>
-//   jsm.streams.add({
-//     name: app.AppNamespace,
-//     subjects: [`${app.AppNamespace}.>`],
-//     retention: RetentionPolicy.Interest
-//   })
-// );
 
 const EventMetadata = EventBaseSchema.pick('_context', '_tag');
 
