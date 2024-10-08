@@ -11,6 +11,7 @@ import { LibsqlClient } from './libsql-client/index.js';
 import type { InValue } from '@libsql/client';
 import type { ParseError } from '@effect/schema/ParseResult';
 import { Schema } from '@effect/schema';
+import { isTagged } from 'effect/Predicate';
 
 class _WriteExecutor extends Context.Tag('@hex-effect/_WriteExecutor')<
   _WriteExecutor,
@@ -121,25 +122,29 @@ export const EventStoreLive = Layer.unwrapEffect(
   })
 );
 
+const isTaggedError = (e: unknown) => isTagged(e, 'SqlError') || isTagged(e, 'ParseError');
+
 export const WTLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
     const client = yield* LibsqlClient.LibsqlClient;
     const save = yield* SaveEvents;
     return <A extends EventBaseType[], E, R>(
-      eff: Effect.Effect<A, E, R>,
+      useCase: Effect.Effect<A, E, R>,
       isolationLevel: IsolationLevel
     ) => {
-      const shmee = eff.pipe(
+      const useCaseWithEventStorage = useCase.pipe(
         Effect.tap(save),
-        Effect.catchAll((e) => Effect.fail(new TransactionError({ cause: e })))
+        Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
       );
 
       if (isolationLevel === IsolationLevel.Batched) {
-        const prog = Effect.gen(function* () {
+        return Effect.gen(function* () {
           const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
-          const results = yield* Effect.provideService(shmee, _WriteExecutor, (stm) =>
-            Ref.update(ref, (a) => [...a, stm])
+          const results = yield* Effect.provideService(
+            useCaseWithEventStorage,
+            _WriteExecutor,
+            (stm) => Ref.update(ref, (a) => [...a, stm])
           );
           const writes = yield* Ref.get(ref);
           yield* Effect.tryPromise({
@@ -157,10 +162,8 @@ export const WTLive = Layer.effect(
           });
           return results;
         });
-
-        return prog;
       } else if (isolationLevel === IsolationLevel.Serializable) {
-        return shmee.pipe(
+        return useCaseWithEventStorage.pipe(
           client.withTransaction,
           Effect.catchTag('SqlError', (e) => Effect.fail(new TransactionError({ cause: e })))
         );
