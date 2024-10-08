@@ -254,6 +254,12 @@ importers:
       '@libsql/client':
         specifier: ~0.14.0
         version: 0.14.0
+      '@nats-io/jetstream':
+        specifier: ^3.0.0-10
+        version: 3.0.0-10
+      '@nats-io/transport-node':
+        specifier: ^3.0.0-12
+        version: 3.0.0-12
       '@opentelemetry/semantic-conventions':
         specifier: ^1.27.0
         version: 1.27.0
@@ -263,9 +269,6 @@ importers:
       nanoid:
         specifier: ^5.0.7
         version: 5.0.7
-      nats:
-        specifier: ^2.28.0
-        version: 2.28.0
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -714,6 +717,24 @@ packages:
     resolution: {integrity: sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==}
     cpu: [x64]
     os: [win32]
+
+  '@nats-io/jetstream@3.0.0-10':
+    resolution: {integrity: sha512-FOdwBximucQszBAsSAckqhXxh0WZozKbRTMzODCudcHpOEv0jUwnoqFLG/8r607pJDX1gdiYADF5hpeV3gvh7A==}
+
+  '@nats-io/nats-core@3.0.0-27':
+    resolution: {integrity: sha512-xJvUWoRvUTG/3K4Ppf5KXTZezicbvd2o/psMyI7YPtIxKZsZALXL/bLoNb7FB/Hw4jECioZE7LZCSK41npFD2A==}
+
+  '@nats-io/nkeys@1.2.0-4':
+    resolution: {integrity: sha512-61R4SO9059AyZBhoZRECHobHsY6mBOGwB5ewBrbnDKVtTehnFwyMNaORHhksFmu9K0zyUtwBWyffzKpibp2Cew==}
+    engines: {node: '>=16.0.0'}
+
+  '@nats-io/nuid@2.0.1-2':
+    resolution: {integrity: sha512-oXJiWXH87FjcPAXVVkoY+o7z9YFuOvsVlUlvB4h/QsoC1hp63lB18YOMHmKxVNO7BzvwzJh3SKLlIlsQrEwaxg==}
+    engines: {node: '>= 18.x'}
+
+  '@nats-io/transport-node@3.0.0-12':
+    resolution: {integrity: sha512-TWBlZULn02iY3A3+MrC5CztQ4YclFQPiQrH56fToC68NA1rfqWw54RPWaUVrbjgg5u6dX1CH6yuNZImdZV5HGA==}
+    engines: {node: '>= 18.0.0'}
 
   '@neon-rs/load@0.0.4':
     resolution: {integrity: sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw==}
@@ -1818,12 +1839,10 @@ packages:
 
   libsql@0.3.19:
     resolution: {integrity: sha512-Aj5cQ5uk/6fHdmeW0TiXK42FqUlwx7ytmMLPSaUQPin5HKKKuUPD62MAbN4OEweGBBI7q1BekoEN4gPUEL6MZA==}
-    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   libsql@0.4.5:
     resolution: {integrity: sha512-sorTJV6PNt94Wap27Sai5gtVLIea4Otb2LUiAUyr3p6BPOScGMKGt5F1b5X/XgkNtcsDKeX5qfeBDj+PdShclQ==}
-    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   lilconfig@2.1.0:
@@ -3085,6 +3104,27 @@ snapshots:
 
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3':
     optional: true
+
+  '@nats-io/jetstream@3.0.0-10':
+    dependencies:
+      '@nats-io/nats-core': 3.0.0-27
+
+  '@nats-io/nats-core@3.0.0-27':
+    dependencies:
+      '@nats-io/nkeys': 1.2.0-4
+      '@nats-io/nuid': 2.0.1-2
+
+  '@nats-io/nkeys@1.2.0-4':
+    dependencies:
+      tweetnacl: 1.0.3
+
+  '@nats-io/nuid@2.0.1-2': {}
+
+  '@nats-io/transport-node@3.0.0-12':
+    dependencies:
+      '@nats-io/nats-core': 3.0.0-27
+      '@nats-io/nkeys': 1.2.0-4
+      '@nats-io/nuid': 2.0.1-2
 
   '@neon-rs/load@0.0.4': {}
 
