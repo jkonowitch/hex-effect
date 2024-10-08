@@ -1,4 +1,5 @@
 import {
+  EventBaseSchema,
   IsolationLevel,
   TransactionError,
   WithTransaction,
@@ -46,9 +47,8 @@ const EventRecordInsert = Schema.Struct({
 });
 
 const UnpublishedEventRecord = Schema.Struct({
-  ...EventRecordInsert.pick('messageId', 'payload').fields,
-  tag: Schema.String,
-  context: Schema.String
+  ...EventBaseSchema.omit('occurredOn').fields,
+  ...EventRecordInsert.pick('payload').fields
 });
 
 class SaveEvents extends Context.Tag('@hex-effect/libsql/save-events')<
@@ -96,8 +96,8 @@ export class GetUnpublishedEvents extends Context.Tag('@hex-effect/libsql/GetUnp
           sql`SELECT
             payload,
             message_id,
-            json_extract(payload, '$._tag') AS tag,
-            json_extract(payload, '$._context') AS context
+            json_extract(payload, '$._tag') AS _tag,
+            json_extract(payload, '$._context') AS _context
           FROM hex_effect_events
           WHERE delivered = 0;`.pipe(
             Effect.andThen(Schema.decodeUnknown(Schema.Array(UnpublishedEventRecord)))
