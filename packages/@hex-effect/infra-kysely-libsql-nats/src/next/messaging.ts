@@ -10,7 +10,6 @@ import { Schema } from '@effect/schema';
 import { EventBaseSchema } from '@hex-effect/core';
 import type { UnpublishedEventRecord } from './index.js';
 import { UnknownException } from 'effect/Cause';
-import { constVoid } from 'effect/Function';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -53,9 +52,7 @@ export class PublishEvent extends Context.Tag('@hex-effect/PublishEvent')<
         yield* ensureJetstream(app);
 
         return (e) =>
-          callNats(
-            js.publish(app.asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 })
-          ).pipe(Effect.map(constVoid));
+          callNats(js.publish(app.asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 }));
       })
     );
 }
