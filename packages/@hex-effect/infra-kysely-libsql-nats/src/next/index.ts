@@ -46,7 +46,7 @@ const EventRecordInsert = Schema.Struct({
   payload: Schema.String
 });
 
-const UnpublishedEventRecord = Schema.Struct({
+export const UnpublishedEventRecord = Schema.Struct({
   ...EventBaseSchema.omit('occurredOn').fields,
   ...EventRecordInsert.pick('payload').fields
 });
