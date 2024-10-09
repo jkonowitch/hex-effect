@@ -5,11 +5,11 @@ import {
   WithTransaction,
   type EventBaseType
 } from '@hex-effect/core';
-import { Context, Effect, Layer, Option, PubSub, Ref } from 'effect';
+import { Config, Context, Effect, Layer, Option, PubSub, Ref } from 'effect';
 import { SqlClient, type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
-import { LibsqlClient } from './libsql-client/index.js';
-import type { InValue } from '@libsql/client';
+import { LibsqlClient } from '@effect/sql-libsql';
+import { createClient, type InValue } from '@libsql/client';
 import type { ParseError } from '@effect/schema/ParseResult';
 import { Schema } from '@effect/schema';
 import { isTagged } from 'effect/Predicate';
@@ -20,6 +20,19 @@ class _WriteExecutor extends Context.Tag('@hex-effect/_WriteExecutor')<
 >() {
   public static live = Layer.succeed(this, (stm) => stm);
 }
+
+export class LibsqlSdk extends Effect.Service<LibsqlSdk>()('@hex-effect/LibsqlSdk', {
+  scoped: Effect.gen(function* () {
+    const url = yield* Config.string('TURSO_URL');
+    const sdk = yield* Effect.acquireRelease(
+      Effect.sync(() => createClient({ url })),
+      (a) => Effect.sync(() => a.close())
+    );
+
+    return { sdk };
+  }),
+  accessors: true
+}) {}
 
 export class WriteStatement extends Context.Tag('WriteStatement')<
   WriteStatement,
@@ -110,13 +123,14 @@ export class GetUnpublishedEvents extends Context.Tag('@hex-effect/libsql/GetUnp
 export const EventStoreLive = Layer.unwrapEffect(
   Effect.gen(function* () {
     const sql = yield* LibsqlClient.LibsqlClient;
+    const sdk = yield* LibsqlSdk.sdk;
     const [ensureEventTableStmt] = sql`CREATE TABLE IF NOT EXISTS hex_effect_events (
         message_id TEXT PRIMARY KEY NOT NULL,
         occurred_on DATETIME NOT NULL,
         delivered INTEGER NOT NULL DEFAULT 0,
         payload TEXT NOT NULL
       );`.compile();
-    yield* Effect.promise(() => sql.sdk.migrate([{ sql: ensureEventTableStmt, args: [] }]));
+    yield* Effect.promise(() => sdk.migrate([{ sql: ensureEventTableStmt, args: [] }]));
 
     return Layer.mergeAll(SaveEvents.live, GetUnpublishedEvents.live);
   })
@@ -128,6 +142,8 @@ export const WithTransactionLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
     const client = yield* LibsqlClient.LibsqlClient;
+    const sdk = yield* LibsqlSdk.sdk;
+
     const save = yield* SaveEvents;
     const pub = yield* UseCaseCommit;
     return <A extends EventBaseType[], E, R>(
@@ -152,7 +168,7 @@ export const WithTransactionLive = Layer.effect(
           const writes = yield* Ref.get(ref);
           yield* Effect.tryPromise({
             try: () =>
-              client.sdk.batch(
+              sdk.batch(
                 writes.map((w) => {
                   const [sql, args] = w.compile();
                   return {

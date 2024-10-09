@@ -1,5 +1,4 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
-import { LibsqlClient } from './libsql-client/index.js';
 import { describe, expect, layer } from '@effect/vitest';
 import { Effect, Config, Context, Layer, String, identity, Stream, Fiber } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
@@ -12,9 +11,12 @@ import {
   GetUnpublishedEvents,
   UseCaseCommit,
   WriteStatement,
-  WithTransactionLive
+  WithTransactionLive,
+  LibsqlSdk
 } from './index.js';
 import { get } from 'effect/Struct';
+import { LibsqlClient } from '@effect/sql-libsql';
+import { createClient } from '@libsql/client';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -34,14 +36,23 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
     )
   );
 
-  static ClientLive = Layer.unwrapEffect(
+  static ClientLive = Layer.unwrapScoped(
     Effect.gen(function* () {
       const container = yield* LibsqlContainer;
-      return LibsqlClient.layer({
-        url: Config.succeed(`http://localhost:${container.getMappedPort(8080)}`),
-        transformQueryNames: Config.succeed(String.camelToSnake),
-        transformResultNames: Config.succeed(String.snakeToCamel)
-      });
+      const sdk = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          createClient({ url: `http://localhost:${container.getMappedPort(8080)}` })
+        ),
+        (c) => Effect.sync(() => c.close())
+      );
+      return Layer.merge(
+        LibsqlClient.layer({
+          liveClient: Config.succeed(sdk),
+          transformQueryNames: Config.succeed(String.camelToSnake),
+          transformResultNames: Config.succeed(String.snakeToCamel)
+        }),
+        Layer.succeed(LibsqlSdk, new LibsqlSdk({ sdk }))
+      );
     })
   ).pipe(Layer.provide(this.Live));
 }
@@ -114,6 +125,7 @@ const addPerson = (name: string) =>
 const Migrations = Layer.scopedDiscard(
   Effect.gen(function* () {
     const sql = yield* LibsqlClient.LibsqlClient;
+    const sdk = yield* LibsqlSdk.sdk;
 
     const migrateDatabase = sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
 
@@ -128,7 +140,7 @@ const Migrations = Layer.scopedDiscard(
         cmd: string;
       }>`SELECT 'DROP INDEX IF EXISTS ' || name || ';'as cmd FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'hex_effect_%';`;
       yield* Effect.promise(() =>
-        sql.sdk.migrate([
+        sdk.migrate([
           `PRAGMA foreign_keys=OFF;`,
           ...dropTriggerCmds.map(get('cmd')),
           ...dropIndexCmds.map(get('cmd')),
