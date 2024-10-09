@@ -9,7 +9,7 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "@effect/vitest": "^0.10.5",
+    "@effect/vitest": "^0.12.0",
     "@types/bun": "~1.1.6",
     "eslint": "^8.57.0",
     "prettier": "^3.2.5",
@@ -24,12 +24,13 @@
   },
   "packageManager": "pnpm@9.6.0",
   "dependencies": {
-    "@effect/platform": "^0.66.2",
-    "@effect/rpc": "^0.40.2",
-    "@effect/rpc-http": "^0.38.2",
-    "@effect/schema": "^0.74.1",
-    "@effect/sql": "^0.14.0",
-    "effect": "^3.8.4",
+    "@effect/platform": "^0.68.1",
+    "@effect/rpc": "^0.43.0",
+    "@effect/rpc-http": "^0.41.0",
+    "@effect/schema": "^0.75.2",
+    "@effect/sql": "^0.16.1",
+    "@effect/experimental": "^0.29.1",
+    "effect": "^3.9.1",
     "exit-hook": "^4.0.0"
   }
 }

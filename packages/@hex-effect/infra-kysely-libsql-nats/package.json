@@ -13,9 +13,10 @@
   },
   "type": "module",
   "peerDependencies": {
-    "@effect/schema": ">=0.74",
     "@libsql/client": "~0.14.0",
-    "effect": ">=3.8"
+    "effect": ">=3.9",
+    "@effect/sql": ">=0.16.1",
+    "@effect/sql-libsql": ">=0.4.1"
   },
   "dependencies": {
     "@hex-effect/core": "workspace:*",
