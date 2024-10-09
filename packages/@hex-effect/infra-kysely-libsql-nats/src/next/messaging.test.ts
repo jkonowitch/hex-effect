@@ -55,7 +55,6 @@ describe('Messaging', () => {
             Stream.runCollect,
             Effect.fork
           );
-          yield* Effect.promise(() => sub.drain());
           const msg = yield* Fiber.join(stream).pipe(Effect.flatMap(Chunk.get(0)));
           expect(msg.string()).toEqual('hello');
         })
