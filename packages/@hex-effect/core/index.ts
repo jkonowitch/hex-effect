@@ -1,15 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { Schema } from '@effect/schema';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { Context, Data, Effect, Fiber, Layer, Scope } from 'effect';
+import { Context, Data, Effect } from 'effect';
 import { nanoid } from 'nanoid';
 
-/**
- * All events must extend from this base
- */
-export const EventBaseSchema = Schema.Struct({
+const EventBaseSchema = Schema.Struct({
   _context: Schema.String,
   _tag: Schema.String,
   occurredOn: Schema.Date.pipe(
@@ -22,24 +18,21 @@ export const EventBaseSchema = Schema.Struct({
   )
 });
 
-export type EventBaseType = typeof EventBaseSchema.Type & {
-  encode: (
-    args: typeof EventBaseSchema.Type
-  ) => Effect.Effect<typeof EventBaseSchema.Encoded, ParseError, never>;
-};
-
-type Jawn<Z extends Schema.Schema<any, any, any>> = Z['Type'] & {
-  encode: (args: Z['Type']) => Effect.Effect<Z['Encoded'], ParseError, never>;
+type Encodable<Z extends Schema.Schema<any, any, any>> = Z['Type'] & {
+  encode: () => Effect.Effect<Z['Encoded'], ParseError, never>;
 };
 
 type EventSchemas = {
   schema: Schema.Schema<any, any, any>;
-  metadata: Pick<EventBaseType, '_context' | '_tag'>;
+  metadata: Pick<typeof EventBaseSchema.Type, '_context' | '_tag'>;
   _tag: 'EventSchema';
-  make: (...args: any[]) => Jawn<Schema.Schema<any, any, any>>;
+  make: (...args: any[]) => Encodable<Schema.Schema<any, any, any>>;
 };
 
-const makeDomainEvent = <T extends string, C extends string, F extends Schema.Struct.Fields>(
+/**
+ * Builder for Domain Events
+ */
+export const makeDomainEvent = <T extends string, C extends string, F extends Schema.Struct.Fields>(
   metadata: { _tag: T; _context: C },
   fields: F
 ) => {
@@ -56,63 +49,25 @@ const makeDomainEvent = <T extends string, C extends string, F extends Schema.St
 
   return {
     schema,
-    make: (...args: Parameters<typeof schema.make>) => ({ ...schema.make(...args), encode }),
+    make: (...args: Parameters<typeof schema.make>) => {
+      const made = schema.make(...args);
+      return { ...made, encode: () => encode(made) };
+    },
     metadata,
     _tag: 'EventSchema'
   } as const satisfies EventSchemas;
 };
 
-const PersonCreatedEvent = makeDomainEvent(
-  { _tag: 'jawn', _context: 'kralf' },
-  { sid: Schema.String }
-);
-
-const BlahPerson = makeDomainEvent({ _tag: 'shmee', _context: 'kralf' }, { id: Schema.String });
-
-const r = BlahPerson.make({ id: 'asd' });
-const ss = <A extends typeof EventBaseSchema.Type, I, R>(e: Jawn<Schema.Schema<A, I, R>>) => null;
-
-ss(r);
-
-function eventConsumer<E extends EventSchemas[], Err, Req>(
-  eventSchemas: E,
-  handler: (e: E[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
-  config: { $durableName: string }
-) {
-  const union = Schema.Union(...eventSchemas.map((s) => s.schema));
-}
-
-eventConsumer([PersonCreatedEvent, BlahPerson], (e) => Effect.void, { $durableName: 'asd' });
-
-export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
-  EventConsumer,
-  {
-    register<Q extends EventBaseType, I, R extends never, Err, Req>(
-      eventSchema: Schema.Schema<Q, I, R>,
-      triggers: {
-        context: Schema.Schema<Q, I, R>['Type']['_context'];
-        tag: Schema.Schema<Q, I, R>['Type']['_tag'];
-      }[],
-      handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
-      config: { $durableName: string }
-    ): Effect.Effect<void, never, Req>;
-  }
->() {}
-
 /**
  * Service which allows an `application` to connect a Domain Event with a handler
  * This is a linchpin service that enables an event-driven architecture
  */
-export class EventHandlerService extends Context.Tag('EventHandlerService')<
-  EventHandlerService,
+export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
+  EventConsumer,
   {
-    register<Q extends EventBaseType, I, R extends never, Err, Req>(
-      eventSchema: Schema.Schema<Q, I, R>,
-      triggers: {
-        context: Schema.Schema<Q, I, R>['Type']['_context'];
-        tag: Schema.Schema<Q, I, R>['Type']['_tag'];
-      }[],
-      handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
+    register<E extends EventSchemas[], Err, Req>(
+      eventSchemas: E,
+      handler: (e: E[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
     ): Effect.Effect<void, never, Req>;
   }
@@ -132,14 +87,14 @@ export class TransactionError extends Data.TaggedError('@hex-effect/TransactionE
 
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
-  <A extends EventBaseType[], E, R>(
+  <A extends Encodable<typeof EventBaseSchema>[], E, R>(
     eff: Effect.Effect<A, E, R>,
     isolationLevel: IsolationLevel
   ) => Effect.Effect<A, E | TransactionError, R>
 >() {}
 
 export function withNextTXBoundary(level: IsolationLevel) {
-  return <A extends EventBaseType[], E, R>(
+  return <A extends Encodable<typeof EventBaseSchema>[], E, R>(
     useCase: Effect.Effect<A, E, R>
   ): Effect.Effect<A, E | TransactionError, WithTransaction | R> =>
     Effect.gen(function* () {
