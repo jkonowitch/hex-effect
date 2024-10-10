@@ -27,55 +27,56 @@ const callNats = <T>(operation: Promise<T>) =>
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-const ensureJetstream = (app: ApplicationNamespace) =>
+const ensureJetstream = (app: AppNamespace) =>
   Effect.gen(function* () {
     const conn = yield* NatsClient;
     const jsm = yield* Effect.promise(() => jetstreamManager(conn));
     yield* callNats(
       jsm.streams.add({
-        name: app.AppNamespace,
-        subjects: [`${app.AppNamespace}.>`],
+        name: app.applicationNamespace,
+        subjects: [`${app.applicationNamespace}.>`],
         retention: RetentionPolicy.Interest
       })
     );
   });
 
-export class PublishEvent extends Context.Tag('@hex-effect/PublishEvent')<
-  PublishEvent,
-  (e: typeof UnpublishedEventRecord.Type) => Effect.Effect<void, NatsError>
->() {
-  public static layer = (app: ApplicationNamespace) =>
-    Layer.effect(
-      this,
-      Effect.gen(function* () {
-        const conn = yield* NatsClient;
-        const js = jetstream(conn);
-        yield* ensureJetstream(app);
-
-        return (e) =>
-          callNats(js.publish(app.asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 }));
-      })
-    );
-}
-
-const EventMetadata = EventBaseSchema.pick('_context', '_tag');
-
-export class ApplicationNamespace extends Schema.Class<ApplicationNamespace>(
-  'ApplicationNamespace'
-)({
-  AppNamespace: Schema.NonEmptyTrimmedString
+class AppNamespace extends Effect.Service<AppNamespace>()('@hex-effect/AppNamespace', {
+  accessors: true,
+  effect: Config.string('APPLICATION_NAMESPACE').pipe(
+    Effect.map((applicationNamespace) => ({
+      applicationNamespace
+    }))
+  )
 }) {
   asSubject(e: typeof EventMetadata.Type): string {
-    return `${this.AppNamespace}.${e._context}.${e._tag}`;
+    return `${this.applicationNamespace}.${e._context}.${e._tag}`;
   }
 }
+
+export class PublishEvent extends Effect.Service<PublishEvent>()('@hex-effect/PublishEvent', {
+  accessors: true,
+  effect: Effect.gen(function* () {
+    const a = yield* AppNamespace;
+    const conn = yield* NatsClient;
+    const js = jetstream(conn);
+    yield* ensureJetstream(a);
+
+    return {
+      publish: (e: typeof UnpublishedEventRecord.Type) =>
+        callNats(js.publish(a.asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 }))
+    };
+  }),
+  dependencies: [AppNamespace.Default]
+}) {}
+
+const EventMetadata = EventBaseSchema.pick('_context', '_tag');
 
 export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
   '@hex-effect/NatsEventConsumer',
   {
     accessors: true,
     effect: Effect.gen(function* () {
-      yield* Effect.log('');
+      const c = yield* NatsClient;
       const q: typeof EventConsumer.Service = {
         register(schema, handler, config) {
           const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
@@ -92,6 +93,48 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
     })
   }
 ) {}
+
+// const upsertConsumer = (
+//   natsService: INatsService,
+//   $durableName: string,
+//   subjects: string[]
+// ) =>
+//   Effect.gen(function* () {
+//     const config: ConsumerUpdateConfig = {
+//       max_deliver: 3,
+//       filter_subjects: triggers.map((t) => natsService.eventToSubject(t).asSubject)
+//     };
+
+//     const consumerExists = yield* callNats(
+//       natsService.jetstreamManager.consumers.info(natsService.streamInfo.config.name, $durableName)
+//     ).pipe(
+//       Effect.map(constTrue),
+//       Effect.catchIf(
+//         (e) => e.raw.code === ErrorCode.JetStream404NoMessages,
+//         () => Effect.succeed(false)
+//       )
+//     );
+
+//     if (consumerExists) {
+//       return yield* callNats(
+//         natsService.jetstreamManager.consumers.update(
+//           natsService.streamInfo.config.name,
+//           $durableName,
+//           config
+//         )
+//       );
+//     } else {
+//       return yield* callNats(
+//         natsService.jetstreamManager.consumers.add(natsService.streamInfo.config.name, {
+//           ...config,
+//           ack_policy: AckPolicy.Explicit,
+//           durable_name: $durableName
+//         })
+//       );
+//     }
+//     // the only allowable error is handled above
+//   }).pipe(Effect.orDie, Effect.tap(Effect.logDebug(`Added handler for ${$durableName}`)));
+
 export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
   NatsClient,
   NatsConnection
