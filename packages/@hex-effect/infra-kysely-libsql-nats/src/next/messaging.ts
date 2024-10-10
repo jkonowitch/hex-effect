@@ -69,6 +69,23 @@ export class ApplicationNamespace extends Schema.Class<ApplicationNamespace>(
   }
 }
 
+export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
+  '@hex-effect/NatsEventConsumer',
+  {
+    effect: Effect.gen(function* () {
+      yield* Effect.log('');
+      const q: typeof EventConsumer.Service = {
+        register(schema, handler, config) {
+          const r = AST.getPropertySignatures(schema.ast);
+          console.log(r, JSON.stringify(schema.fields, null, 2));
+          return Effect.void;
+        }
+      };
+      return q;
+    }),
+    accessors: true
+  }
+) {}
 export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
   NatsClient,
   NatsConnection
