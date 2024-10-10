@@ -35,54 +35,46 @@ const callNats = <T>(operation: Promise<T>) =>
     catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
   }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
 
-class AppNamespace extends Effect.Service<AppNamespace>()('@hex-effect/AppNamespace', {
-  accessors: true,
-  effect: Config.string('APPLICATION_NAMESPACE').pipe(
-    Effect.map((applicationNamespace) => ({
-      applicationNamespace
-    }))
-  )
-}) {
-  asSubject(e: typeof EventMetadata.Type): string {
-    return `${this.applicationNamespace}.${e._context}.${e._tag}`;
-  }
-}
-
 class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
   '@hex-effect/EstablishedJetstream',
   {
     accessors: true,
     effect: Effect.gen(function* () {
-      const ns = yield* AppNamespace.applicationNamespace;
+      const applicationNamespace = yield* Config.string('APPLICATION_NAMESPACE');
       const conn = yield* NatsClient;
       const jsm = yield* Effect.promise(() => jetstreamManager(conn));
       const streamInfo = yield* callNats(
         jsm.streams.add({
-          name: ns,
-          subjects: [`${ns}.>`],
+          name: applicationNamespace,
+          subjects: [`${applicationNamespace}.>`],
           retention: RetentionPolicy.Interest
         })
       );
 
-      return { streamInfo, jsm } as const;
-    }),
-    dependencies: [AppNamespace.Default]
+      return {
+        streamInfo,
+        jsm,
+        js: jetstream(conn),
+        applicationNamespace,
+        asSubject(e: typeof EventMetadata.Type): string {
+          return `${applicationNamespace}.${e._context}.${e._tag}`;
+        }
+      } as const;
+    })
   }
 ) {}
 
 export class PublishEvent extends Effect.Service<PublishEvent>()('@hex-effect/PublishEvent', {
   accessors: true,
   effect: Effect.gen(function* () {
-    const a = yield* AppNamespace;
-    const conn = yield* NatsClient;
-    const js = jetstream(conn);
+    const { asSubject, js } = yield* EstablishedJetstream;
 
     return {
       publish: (e: typeof UnpublishedEventRecord.Type) =>
-        callNats(js.publish(a.asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 }))
+        callNats(js.publish(asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 }))
     };
   }),
-  dependencies: [AppNamespace.Default, EstablishedJetstream.Default]
+  dependencies: [EstablishedJetstream.Default]
 }) {}
 
 const EventMetadata = EventBaseSchema.pick('_context', '_tag');
@@ -92,8 +84,8 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
   {
     accessors: true,
     effect: Effect.gen(function* () {
-      const ns = yield* AppNamespace;
       const ctx = yield* Effect.context<EstablishedJetstream>();
+
       const q: typeof EventConsumer.Service = {
         register(schema, handler, config) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -101,9 +93,9 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
             unknown,
             unknown
           >;
-          const subjects = schema.map((s) => ns.asSubject(s.metadata));
-
-          console.log(subjects);
+          const subjects = schema.map((s) =>
+            Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
+          );
           // const e = Schema.decodeUnknownSync(allSchemas)('');
           return Effect.gen(function* () {
             const info = yield* upsertConsumer({
@@ -119,7 +111,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       };
       return q;
     }),
-    dependencies: [AppNamespace.Default, EstablishedJetstream.Default]
+    dependencies: [EstablishedJetstream.Default]
   }
 ) {}
 
