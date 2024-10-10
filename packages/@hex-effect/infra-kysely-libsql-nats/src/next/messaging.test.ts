@@ -3,6 +3,8 @@ import { Effect, Config, Context, Layer, Stream, Fiber, Chunk, identity } from '
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { ApplicationNamespace, NatsClient, PublishEvent } from './messaging.js';
 import { UnpublishedEventRecord } from './index.js';
+import { makeDomainEvent } from '@hex-effect/core';
+import { Schema } from '@effect/schema';
 
 class NatsContainer extends Context.Tag('test/NatsContainer')<
   NatsContainer,
@@ -34,17 +36,22 @@ class NatsContainer extends Context.Tag('test/NatsContainer')<
 
 const appNamespace = new ApplicationNamespace({ AppNamespace: 'kralf' });
 
+const SomeEvent = makeDomainEvent(
+  { _tag: 'SomeEvent', _context: 'SomeContext' },
+  { name: Schema.String }
+);
+
 describe('Messaging', () => {
   layer(PublishEvent.layer(appNamespace).pipe(Layer.provideMerge(NatsContainer.ClientLive)))(
     (it) => {
+      const e = SomeEvent.make({ name: 'Jeff' });
+
       it.scoped('it can publish', () =>
         Effect.gen(function* () {
           const conn = yield* NatsClient;
           const event = UnpublishedEventRecord.make({
-            _context: '@some-context',
-            _tag: 'some-event',
-            payload: 'hello',
-            messageId: '1234'
+            ...e,
+            payload: JSON.stringify(e)
           });
           const sub = conn.subscribe(appNamespace.asSubject(event), {
             timeout: 2000,
@@ -56,9 +63,11 @@ describe('Messaging', () => {
             Effect.fork
           );
           const msg = yield* Fiber.join(stream).pipe(Effect.flatMap(Chunk.get(0)));
-          expect(msg.string()).toEqual('hello');
+          expect(msg.string()).toEqual(event.payload);
         })
       );
+
+      it.effect('asd', () => Effect.gen(function* () {}));
     }
   );
 });

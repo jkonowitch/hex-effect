@@ -84,8 +84,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
           const subjects = schema.map(get('metadata'));
           console.log(allSchemas, subjects);
           const e = Schema.decodeUnknownSync(allSchemas)('');
-
-          return handler(e).pipe(Effect.orDie);
+          return handler('e').pipe(Effect.orDie);
         }
       };
       return q;
