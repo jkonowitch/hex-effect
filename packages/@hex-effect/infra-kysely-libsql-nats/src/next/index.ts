@@ -1,9 +1,9 @@
 import {
-  EventBaseSchema,
   IsolationLevel,
   TransactionError,
   WithTransaction,
-  type EventBaseType
+  type EncodableEventBase,
+  EventBaseSchema
 } from '@hex-effect/core';
 import { Config, Context, Effect, Layer, Option, PubSub, Ref } from 'effect';
 import { SqlClient, type Statement } from '@effect/sql';
@@ -66,14 +66,14 @@ export const UnpublishedEventRecord = Schema.Struct({
 
 class SaveEvents extends Context.Tag('@hex-effect/libsql/save-events')<
   SaveEvents,
-  (e: EventBaseType[]) => Effect.Effect<void, ParseError | SqlError>
+  (e: EncodableEventBase[]) => Effect.Effect<void, ParseError | SqlError>
 >() {
   public static live = Layer.effect(
     this,
     Effect.zip(SqlClient.SqlClient, WriteStatement).pipe(
       Effect.map(
         ([sql, write]) =>
-          (events: EventBaseType[]) =>
+          (events: EncodableEventBase[]) =>
             Effect.forEach(
               events,
               (e) =>
@@ -146,7 +146,7 @@ export const WithTransactionLive = Layer.effect(
 
     const save = yield* SaveEvents;
     const pub = yield* UseCaseCommit;
-    return <A extends EventBaseType[], E, R>(
+    return <A extends EncodableEventBase[], E, R>(
       useCase: Effect.Effect<A, E, R>,
       isolationLevel: IsolationLevel
     ) => {

@@ -1,9 +1,9 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Context, Layer, String, identity, Stream, Fiber } from 'effect';
+import { Effect, Config, Context, Layer, String, identity, Stream, Fiber, pipe } from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { Schema } from '@effect/schema';
-import { EventBaseSchema, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
+import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
 import {
@@ -14,7 +14,7 @@ import {
   WithTransactionLive,
   LibsqlSdk
 } from './index.js';
-import { get } from 'effect/Struct';
+import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { createClient } from '@libsql/client';
 
@@ -57,25 +57,10 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   ).pipe(Layer.provide(this.Live));
 }
 
-const TestEventBase = Schema.Struct({
-  ...EventBaseSchema.omit('_context', '_tag').fields,
-  _context: Schema.Literal('@test').pipe(
-    Schema.propertySignature,
-    Schema.withConstructorDefault(() => '@test' as const)
-  )
-});
-
-export class PersonCreatedEvent extends Schema.TaggedClass<PersonCreatedEvent>()(
-  'PersonCreatedEvent',
-  {
-    ...TestEventBase.fields,
-    id: Schema.String
-  }
-) {
-  encode() {
-    return Schema.encode(PersonCreatedEvent)(this);
-  }
-}
+const PersonCreatedEvent = makeDomainEvent(
+  { _tag: 'PersonCreatedEvent', _context: '@test' },
+  { id: Schema.String }
+);
 
 const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
 
@@ -217,8 +202,8 @@ describe('WithTransaction', () => {
         expect(res.at(0)!.name).toEqual('Kralf');
         const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
         expect(
-          Schema.decodeUnknownSync(PersonCreatedEvent)(JSON.parse(events.at(0)!.payload))
-        ).toEqual(event);
+          Schema.decodeUnknownSync(PersonCreatedEvent.schema)(JSON.parse(events.at(0)!.payload))
+        ).toEqual(pipe(event!, omit('encode')));
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
       }).pipe(Effect.provide(TestLive))
@@ -237,8 +222,8 @@ describe('WithTransaction', () => {
         expect(res.at(0)!.name).toEqual('Kralf');
         const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
         expect(
-          Schema.decodeUnknownSync(PersonCreatedEvent)(JSON.parse(events.at(0)!.payload))
-        ).toEqual(event);
+          Schema.decodeUnknownSync(PersonCreatedEvent.schema)(JSON.parse(events.at(0)!.payload))
+        ).toEqual(pipe(event!, omit('encode')));
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
       }).pipe(Effect.provide(TestLive))

@@ -5,7 +5,7 @@ import type { ParseError } from '@effect/schema/ParseResult';
 import { Context, Data, Effect } from 'effect';
 import { nanoid } from 'nanoid';
 
-const EventBaseSchema = Schema.Struct({
+export const EventBaseSchema = Schema.Struct({
   _context: Schema.String,
   _tag: Schema.String,
   occurredOn: Schema.Date.pipe(
@@ -17,6 +17,8 @@ const EventBaseSchema = Schema.Struct({
     Schema.withConstructorDefault(() => nanoid())
   )
 });
+
+export type EncodableEventBase = Encodable<typeof EventBaseSchema>;
 
 type Encodable<Z extends Schema.Schema<any, any, any>> = Z['Type'] & {
   encode: () => Effect.Effect<Z['Encoded'], ParseError, never>;
