@@ -7,9 +7,10 @@ import {
 } from '@nats-io/transport-node';
 import { jetstream, jetstreamManager, RetentionPolicy } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
-import { EventBaseSchema } from '@hex-effect/core';
+import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
 import type { UnpublishedEventRecord } from './index.js';
 import { UnknownException } from 'effect/Cause';
+import { get } from 'effect/Struct';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -76,9 +77,15 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       yield* Effect.log('');
       const q: typeof EventConsumer.Service = {
         register(schema, handler, config) {
-          const r = AST.getPropertySignatures(schema.ast);
-          console.log(r, JSON.stringify(schema.fields, null, 2));
-          return Effect.void;
+          const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
+            unknown,
+            unknown
+          >;
+          const subjects = schema.map(get('metadata'));
+          console.log(allSchemas, subjects);
+          const e = Schema.decodeUnknownSync(allSchemas)('');
+
+          return handler(e).pipe(Effect.orDie);
         }
       };
       return q;
