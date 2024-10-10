@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Layer } from 'effect';
+import { Config, Console, Context, Data, Effect, Layer } from 'effect';
 import {
   connect,
   type ConnectionOptions,
@@ -96,6 +96,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       const ctx = yield* Effect.context<EstablishedJetstream>();
       const q: typeof EventConsumer.Service = {
         register(schema, handler, config) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
             unknown,
             unknown
@@ -104,7 +105,16 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
 
           console.log(subjects);
           // const e = Schema.decodeUnknownSync(allSchemas)('');
-          return handler('e').pipe(Effect.orDie);
+          return Effect.gen(function* () {
+            const info = yield* upsertConsumer({
+              $durableName: config.$durableName,
+              subjects
+            }).pipe(Effect.provide(ctx));
+
+            yield* Console.log(info);
+
+            yield* handler('e').pipe(Effect.orDie);
+          });
         }
       };
       return q;
