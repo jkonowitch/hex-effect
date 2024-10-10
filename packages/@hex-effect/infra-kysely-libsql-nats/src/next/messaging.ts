@@ -73,6 +73,7 @@ export class ApplicationNamespace extends Schema.Class<ApplicationNamespace>(
 export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
   '@hex-effect/NatsEventConsumer',
   {
+    accessors: true,
     effect: Effect.gen(function* () {
       yield* Effect.log('');
       const q: typeof EventConsumer.Service = {
@@ -83,13 +84,12 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
           >;
           const subjects = schema.map(get('metadata'));
           console.log(allSchemas, subjects);
-          const e = Schema.decodeUnknownSync(allSchemas)('');
+          // const e = Schema.decodeUnknownSync(allSchemas)('');
           return handler('e').pipe(Effect.orDie);
         }
       };
       return q;
-    }),
-    accessors: true
+    })
   }
 ) {}
 export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
