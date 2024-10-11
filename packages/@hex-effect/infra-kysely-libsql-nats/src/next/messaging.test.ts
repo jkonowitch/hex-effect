@@ -77,12 +77,18 @@ describe('Messaging', () => {
     it.scoped('it can publish', () =>
       Effect.gen(function* () {
         const conn = yield* NatsClient;
-        const sub = conn.subscribe(
-          `${yield* Config.string('APPLICATION_NAMESPACE')}.${event._context}.${event._tag}`,
-          {
-            timeout: 2000,
-            max: 1
-          }
+        const sub = yield* Effect.acquireRelease(
+          Config.string('APPLICATION_NAMESPACE').pipe(
+            Effect.flatMap((ns) =>
+              Effect.sync(() =>
+                conn.subscribe(`${ns}.${event._context}.${event._tag}`, {
+                  timeout: 2000,
+                  max: 1
+                })
+              )
+            )
+          ),
+          (s) => Effect.promise(() => (s.isClosed() ? Promise.resolve() : s.drain()))
         );
         yield* publish(event);
         const stream = yield* Stream.fromAsyncIterable(sub, () => new Error('uh oh')).pipe(
@@ -106,7 +112,7 @@ describe('Messaging', () => {
       }).pipe(Effect.provide(NatsEventConsumer.Default))
     );
 
-    it.effect('Retries when there is an error?', () =>
+    it.effect('Retries when there is a defect', () =>
       Effect.gen(function* () {
         const deferred = yield* Deferred.make<typeof SomeEvent.schema.Type>();
         let i = 0;
@@ -114,17 +120,15 @@ describe('Messaging', () => {
           c.register(
             [SomeEvent],
             (e) => {
+              const result =
+                i === 1 ? Deferred.succeed(deferred, e) : Effect.dieMessage('error dawg');
               i++;
-              console.log('here', i, e.name);
-              return i === 3 ? Deferred.succeed(deferred, e) : Effect.dieMessage('error dawg');
+              return result;
             },
             { $durableName: 'shmee' }
           )
         );
         yield* publish(event);
-        const e2 = SomeEvent.make({ name: 'Kralf' });
-        yield* publish(e2);
-
         const received = yield* Deferred.await(deferred);
         expect(received).toEqual(pipe(event, omit('encode')));
       }).pipe(Effect.provide(NatsEventConsumer.Default))
