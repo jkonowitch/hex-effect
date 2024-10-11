@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Exit, Layer, Predicate, Stream } from 'effect';
+import { Config, Context, Data, Effect, Exit, Layer, Stream } from 'effect';
 import {
   connect,
   type ConnectionOptions,
@@ -107,11 +107,8 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
               Exit.match(exit, {
                 onSuccess: () => Effect.promise(() => m.ackAck()).pipe(Effect.as(constVoid())),
                 onFailure: (c) =>
-                  c._tag === 'Fail'
-                    ? Predicate.isTagged('ParseError')(c.error)
-                      ? Effect.sync(() => m.term())
-                      : Effect.sync(() => m.nak())
-                    : Effect.sync(() => m.term())
+                  // `nak` (e.g. retry) if it died or was interrupted, etc.
+                  c._tag === 'Fail' ? Effect.sync(() => m.term()) : Effect.sync(() => m.nak())
               })
           );
         return pipe(
