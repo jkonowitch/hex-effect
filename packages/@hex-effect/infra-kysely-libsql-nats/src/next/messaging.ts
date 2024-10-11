@@ -31,7 +31,7 @@ import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
 import type { UnpublishedEventRecord } from './index.js';
 import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
-import { constTrue, pipe } from 'effect/Function';
+import { constTrue, constVoid, pipe } from 'effect/Function';
 
 class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
   '@hex-effect/EstablishedJetstream',
@@ -139,10 +139,13 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
               ),
             (m, exit) =>
               Exit.match(exit, {
-                onSuccess: () => Effect.promise(() => m.ackAck()),
+                onSuccess: () => Effect.promise(() => m.ackAck()).pipe(Effect.map(constVoid)),
                 onFailure: (c) =>
                   // `nak` (e.g. retry) if it died or was interrupted, etc.
-                  c._tag === 'Fail' ? Effect.sync(() => m.term()) : Effect.sync(() => m.nak())
+                  c._tag === 'Fail'
+                    ? Effect.sync(() => m.term())
+                    : // could make this exponential
+                      Effect.sync(() => m.nak(m.info.redeliveryCount * 1000))
               })
           ).pipe(Effect.ignoreLogged);
 
