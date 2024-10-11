@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Layer, Stream } from 'effect';
+import { Config, Context, Data, Effect, Exit, Layer, Predicate, Stream } from 'effect';
 import {
   connect,
   type ConnectionOptions,
@@ -12,14 +12,15 @@ import {
   jetstreamManager,
   RetentionPolicy,
   type ConsumerInfo,
-  type ConsumerUpdateConfig
+  type ConsumerUpdateConfig,
+  type JsMsg
 } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
 import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
 import type { UnpublishedEventRecord } from './index.js';
 import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
-import { constTrue, pipe } from 'effect/Function';
+import { constTrue, constVoid, pipe } from 'effect/Function';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -107,7 +108,27 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
             Effect.orDie
           );
 
-          yield* Stream.runForEach(stream, (msg) => handler(msg)).pipe(Effect.fork);
+          const doThings = (msg: JsMsg) =>
+            Effect.acquireUseRelease(
+              Effect.succeed(msg),
+              (a) =>
+                pipe(
+                  Schema.decodeUnknown(Schema.parseJson(allSchemas))(a.string()),
+                  Effect.flatMap(handler)
+                ),
+              (m, exit) =>
+                Exit.match(exit, {
+                  onSuccess: () => Effect.promise(() => m.ackAck()).pipe(Effect.as(constVoid())),
+                  onFailure: (c) =>
+                    c._tag === 'Fail'
+                      ? Predicate.isTagged('ParseError')(c.error)
+                        ? Effect.sync(() => m.term())
+                        : Effect.sync(() => m.nak())
+                      : Effect.sync(() => m.term())
+                })
+            );
+
+          yield* Stream.runForEach(stream, doThings).pipe(Effect.fork);
         });
       };
       return { register };

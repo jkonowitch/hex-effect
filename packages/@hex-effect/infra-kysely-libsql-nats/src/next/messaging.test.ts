@@ -7,15 +7,16 @@ import {
   Stream,
   Fiber,
   Chunk,
-  Console,
   ConfigProvider,
-  Deferred
+  Deferred,
+  pipe
 } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { NatsClient, NatsEventConsumer, PublishEvent } from './messaging.js';
 import { UnpublishedEventRecord } from './index.js';
 import { makeDomainEvent } from '@hex-effect/core';
 import { Schema } from '@effect/schema';
+import { omit } from 'effect/Struct';
 
 class NatsContainer extends Context.Tag('test/NatsContainer')<
   NatsContainer,
@@ -59,49 +60,49 @@ const TestLive = PublishEvent.Default.pipe(
 
 describe('Messaging', () => {
   layer(TestLive)((it) => {
-    let e: (typeof SomeEvent)['schema']['Type'];
+    let event: ReturnType<(typeof SomeEvent)['make']>;
 
-    const publish = (e: (typeof SomeEvent)['schema']['Type']) =>
+    const publish = (e: typeof event) =>
       PublishEvent.publish(
         UnpublishedEventRecord.make({
-          ...e,
+          ...event,
           payload: JSON.stringify(e)
         })
       );
 
     beforeEach(() => {
-      e = SomeEvent.make({ name: 'Jeff' });
+      event = SomeEvent.make({ name: 'Jeff' });
     });
 
     it.scoped('it can publish', () =>
       Effect.gen(function* () {
         const conn = yield* NatsClient;
         const sub = conn.subscribe(
-          `${yield* Config.string('APPLICATION_NAMESPACE')}.${e._context}.${e._tag}`,
+          `${yield* Config.string('APPLICATION_NAMESPACE')}.${event._context}.${event._tag}`,
           {
             timeout: 2000,
             max: 1
           }
         );
-        yield* publish(e);
+        yield* publish(event);
         const stream = yield* Stream.fromAsyncIterable(sub, () => new Error('uh oh')).pipe(
           Stream.runCollect,
           Effect.fork
         );
         const msg = yield* Fiber.join(stream).pipe(Effect.flatMap(Chunk.get(0)));
-        expect(msg.string()).toEqual(JSON.stringify(e));
+        expect(msg.string()).toEqual(JSON.stringify(event));
       })
     );
 
-    it.scoped.only('EventConsumer', () =>
+    it.scoped('EventConsumer', () =>
       Effect.gen(function* () {
-        const deferred = yield* Deferred.make<typeof e>();
+        const deferred = yield* Deferred.make<typeof SomeEvent.schema.Type>();
         yield* NatsEventConsumer.use((c) =>
           c.register([SomeEvent], (e) => Deferred.succeed(deferred, e), { $durableName: 'shmee' })
         );
-        yield* publish(e);
-        const kralf = yield* Deferred.await(deferred);
-        yield* Console.log(kralf);
+        yield* publish(event);
+        const received = yield* Deferred.await(deferred);
+        expect(received).toEqual(pipe(event, omit('encode')));
       }).pipe(Effect.provide(NatsEventConsumer.Default))
     );
   });
