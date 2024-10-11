@@ -65,7 +65,7 @@ describe('Messaging', () => {
     const publish = (e: typeof event) =>
       PublishEvent.publish(
         UnpublishedEventRecord.make({
-          ...event,
+          ...e,
           payload: JSON.stringify(e)
         })
       );
@@ -94,13 +94,37 @@ describe('Messaging', () => {
       })
     );
 
-    it.scoped('EventConsumer', () =>
+    it.effect('EventConsumer', () =>
       Effect.gen(function* () {
         const deferred = yield* Deferred.make<typeof SomeEvent.schema.Type>();
         yield* NatsEventConsumer.use((c) =>
           c.register([SomeEvent], (e) => Deferred.succeed(deferred, e), { $durableName: 'shmee' })
         );
         yield* publish(event);
+        const received = yield* Deferred.await(deferred);
+        expect(received).toEqual(pipe(event, omit('encode')));
+      }).pipe(Effect.provide(NatsEventConsumer.Default))
+    );
+
+    it.effect('Retries when there is an error?', () =>
+      Effect.gen(function* () {
+        const deferred = yield* Deferred.make<typeof SomeEvent.schema.Type>();
+        let i = 0;
+        yield* NatsEventConsumer.use((c) =>
+          c.register(
+            [SomeEvent],
+            (e) => {
+              i++;
+              console.log('here', i, e.name);
+              return i === 3 ? Deferred.succeed(deferred, e) : Effect.dieMessage('error dawg');
+            },
+            { $durableName: 'shmee' }
+          )
+        );
+        yield* publish(event);
+        const e2 = SomeEvent.make({ name: 'Kralf' });
+        yield* publish(e2);
+
         const received = yield* Deferred.await(deferred);
         expect(received).toEqual(pipe(event, omit('encode')));
       }).pipe(Effect.provide(NatsEventConsumer.Default))

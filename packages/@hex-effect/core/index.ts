@@ -2,7 +2,7 @@
 
 import { Schema } from '@effect/schema';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { Context, Data, Effect, Scope } from 'effect';
+import { Context, Data, Effect } from 'effect';
 import { nanoid } from 'nanoid';
 
 export const EventBaseSchema = Schema.Struct({
@@ -71,7 +71,7 @@ export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
       eventSchemas: E,
       handler: (e: E[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
-    ): Effect.Effect<void, never, Req | Scope.Scope>;
+    ): Effect.Effect<void, never, Req>;
   }
 >() {}
 
