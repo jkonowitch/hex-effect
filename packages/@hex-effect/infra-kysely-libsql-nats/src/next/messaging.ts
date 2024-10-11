@@ -80,19 +80,22 @@ class EventConsumerSupervisor extends Effect.Service<EventConsumerSupervisor>()(
   'EventConsumerSupervisor',
   {
     scoped: Effect.gen(function* () {
-      const s = yield* Supervisor.track;
-      const sc = yield* Effect.scope;
+      const supervisor = yield* Supervisor.track;
+      const scope = yield* Effect.scope;
 
-      const track = <A, E, R, S extends Stream.Stream<A, Error, never>>(
+      const track = <A, R, S extends Stream.Stream<A, Error, never>>(
         createStream: Effect.Effect<S, never, Scope.Scope>,
-        processStream: (v: A) => Effect.Effect<void, E, R>
+        processStream: (v: A) => Effect.Effect<void, never, R>
       ) =>
         Effect.gen(function* () {
-          const stream = yield* createStream.pipe(Scope.extend(sc));
-          yield* Stream.runForEach(stream, processStream).pipe(Effect.supervised(s), Effect.fork);
+          const stream = yield* createStream.pipe(Scope.extend(scope));
+          yield* Stream.runForEach(stream, processStream).pipe(
+            Effect.supervised(supervisor),
+            Effect.fork
+          );
         });
 
-      yield* Effect.addFinalizer(() => s.value.pipe(Effect.flatMap(Fiber.interruptAll)));
+      yield* Effect.addFinalizer(() => supervisor.value.pipe(Effect.flatMap(Fiber.interruptAll)));
 
       return { track };
     })
