@@ -88,7 +88,6 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       const ctx = yield* Effect.context<EstablishedJetstream>();
 
       const register: (typeof EventConsumer.Service)['register'] = (schema, handler, config) => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
           unknown,
           unknown
@@ -96,40 +95,35 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
         const subjects = schema.map((s) =>
           Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
         );
-        // const e = Schema.decodeUnknownSync(allSchemas)('');
-        return Effect.gen(function* () {
-          const stream = yield* pipe(
-            upsertConsumer({
-              $durableName: config.$durableName,
-              subjects
-            }),
-            Effect.flatMap(createStream),
-            Effect.provide(ctx),
-            Effect.orDie
+        const processMessage = (msg: JsMsg) =>
+          Effect.acquireUseRelease(
+            Effect.succeed(msg),
+            (a) =>
+              pipe(
+                Schema.decodeUnknown(Schema.parseJson(allSchemas))(a.string()),
+                Effect.flatMap(handler)
+              ),
+            (m, exit) =>
+              Exit.match(exit, {
+                onSuccess: () => Effect.promise(() => m.ackAck()).pipe(Effect.as(constVoid())),
+                onFailure: (c) =>
+                  c._tag === 'Fail'
+                    ? Predicate.isTagged('ParseError')(c.error)
+                      ? Effect.sync(() => m.term())
+                      : Effect.sync(() => m.nak())
+                    : Effect.sync(() => m.term())
+              })
           );
-
-          const doThings = (msg: JsMsg) =>
-            Effect.acquireUseRelease(
-              Effect.succeed(msg),
-              (a) =>
-                pipe(
-                  Schema.decodeUnknown(Schema.parseJson(allSchemas))(a.string()),
-                  Effect.flatMap(handler)
-                ),
-              (m, exit) =>
-                Exit.match(exit, {
-                  onSuccess: () => Effect.promise(() => m.ackAck()).pipe(Effect.as(constVoid())),
-                  onFailure: (c) =>
-                    c._tag === 'Fail'
-                      ? Predicate.isTagged('ParseError')(c.error)
-                        ? Effect.sync(() => m.term())
-                        : Effect.sync(() => m.nak())
-                      : Effect.sync(() => m.term())
-                })
-            );
-
-          yield* Stream.runForEach(stream, doThings).pipe(Effect.fork);
-        });
+        return pipe(
+          upsertConsumer({
+            $durableName: config.$durableName,
+            subjects
+          }),
+          Effect.flatMap(createStream),
+          Effect.provide(ctx),
+          Effect.orDie,
+          Effect.flatMap((stream) => Stream.runForEach(stream, processMessage).pipe(Effect.fork))
+        );
       };
       return { register };
     }),
