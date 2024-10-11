@@ -19,7 +19,7 @@ import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
 import type { UnpublishedEventRecord } from './index.js';
 import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
-import { constTrue } from 'effect/Function';
+import { constTrue, pipe } from 'effect/Function';
 
 class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
@@ -97,12 +97,17 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
         );
         // const e = Schema.decodeUnknownSync(allSchemas)('');
         return Effect.gen(function* () {
-          const info = yield* upsertConsumer({
-            $durableName: config.$durableName,
-            subjects
-          }).pipe(Effect.provide(ctx));
-          const stream = yield* createStream(info).pipe(Effect.provide(ctx), Effect.orDie);
-          return yield* Stream.runForEach(stream, (msg) => handler(msg)).pipe(Effect.fork);
+          const stream = yield* pipe(
+            upsertConsumer({
+              $durableName: config.$durableName,
+              subjects
+            }),
+            Effect.flatMap(createStream),
+            Effect.provide(ctx),
+            Effect.orDie
+          );
+
+          yield* Stream.runForEach(stream, (msg) => handler(msg)).pipe(Effect.fork);
         });
       };
       return { register };
