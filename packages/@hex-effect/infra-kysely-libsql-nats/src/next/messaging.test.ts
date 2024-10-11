@@ -98,9 +98,7 @@ describe('Messaging', () => {
         const deferred = yield* Deferred.make<typeof e>();
         yield* NatsEventConsumer.use((c) =>
           c.register([SomeEvent], (e) => Deferred.succeed(deferred, e), { $durableName: 'shmee' })
-        ).pipe(Effect.fork);
-        console.log(e);
-        yield* Effect.yieldNow();
+        );
         yield* publish(e);
         const kralf = yield* Deferred.await(deferred);
         yield* Console.log(kralf);

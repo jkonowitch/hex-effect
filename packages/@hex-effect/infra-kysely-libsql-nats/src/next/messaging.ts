@@ -1,4 +1,4 @@
-import { Config, Console, Context, Data, Effect, Layer, Stream } from 'effect';
+import { Config, Context, Data, Effect, Layer, Stream } from 'effect';
 import {
   connect,
   type ConnectionOptions,
@@ -102,8 +102,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
             subjects
           }).pipe(Effect.provide(ctx));
           const stream = yield* createStream(info).pipe(Effect.provide(ctx), Effect.orDie);
-          yield* Console.log(info);
-          yield* Stream.runForEach(stream, (msg) => handler(msg)).pipe(Effect.orDie);
+          return yield* Stream.runForEach(stream, (msg) => handler(msg)).pipe(Effect.fork);
         });
       };
       return { register };
@@ -155,7 +154,7 @@ const createStream = (consumerInfo: ConsumerInfo) =>
       callNats(eJS.js.consumers.get(eJS.streamInfo.config.name, consumerInfo.name)).pipe(
         Effect.flatMap((c) => callNats(c.consume()))
       ),
-      (consumer) => callNats(consumer.close()).pipe(Effect.ignoreLogged)
+      (consumer) => callNats(consumer.close()).pipe(Effect.orDie)
     );
 
     return Stream.fromAsyncIterable(consumer, (e) => new Error(`${e}`));
