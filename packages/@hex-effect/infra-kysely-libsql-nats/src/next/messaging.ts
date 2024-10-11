@@ -1,4 +1,4 @@
-import { Config, Console, Context, Data, Effect, Layer } from 'effect';
+import { Config, Console, Context, Data, Effect, Layer, Stream } from 'effect';
 import {
   connect,
   type ConnectionOptions,
@@ -11,6 +11,7 @@ import {
   jetstream,
   jetstreamManager,
   RetentionPolicy,
+  type ConsumerInfo,
   type ConsumerUpdateConfig
 } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
@@ -50,7 +51,6 @@ class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
           retention: RetentionPolicy.Interest
         })
       );
-
       return {
         streamInfo,
         jsm,
@@ -86,30 +86,27 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
     effect: Effect.gen(function* () {
       const ctx = yield* Effect.context<EstablishedJetstream>();
 
-      const q: typeof EventConsumer.Service = {
-        register(schema, handler, config) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
-            unknown,
-            unknown
-          >;
-          const subjects = schema.map((s) =>
-            Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
-          );
-          // const e = Schema.decodeUnknownSync(allSchemas)('');
-          return Effect.gen(function* () {
-            const info = yield* upsertConsumer({
-              $durableName: config.$durableName,
-              subjects
-            }).pipe(Effect.provide(ctx));
-
-            yield* Console.log(info);
-
-            yield* handler('e').pipe(Effect.orDie);
-          });
-        }
+      const register: (typeof EventConsumer.Service)['register'] = (schema, handler, config) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
+          unknown,
+          unknown
+        >;
+        const subjects = schema.map((s) =>
+          Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
+        );
+        // const e = Schema.decodeUnknownSync(allSchemas)('');
+        return Effect.gen(function* () {
+          const info = yield* upsertConsumer({
+            $durableName: config.$durableName,
+            subjects
+          }).pipe(Effect.provide(ctx));
+          const stream = yield* createStream(info).pipe(Effect.provide(ctx), Effect.orDie);
+          yield* Console.log(info);
+          yield* Stream.runForEach(stream, (msg) => handler(msg)).pipe(Effect.orDie);
+        });
       };
-      return q;
+      return { register };
     }),
     dependencies: [EstablishedJetstream.Default]
   }
@@ -149,6 +146,20 @@ const upsertConsumer = (params: { $durableName: string; subjects: string[] }) =>
     }
     // the only allowable error is handled above
   }).pipe(Effect.orDie, Effect.tap(Effect.logDebug(`Added handler for ${params.$durableName}`)));
+
+const createStream = (consumerInfo: ConsumerInfo) =>
+  Effect.gen(function* () {
+    const eJS = yield* EstablishedJetstream;
+
+    const consumer = yield* Effect.acquireRelease(
+      callNats(eJS.js.consumers.get(eJS.streamInfo.config.name, consumerInfo.name)).pipe(
+        Effect.flatMap((c) => callNats(c.consume()))
+      ),
+      (consumer) => callNats(consumer.close()).pipe(Effect.ignoreLogged)
+    );
+
+    return Stream.fromAsyncIterable(consumer, (e) => new Error(`${e}`));
+  });
 
 export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
   NatsClient,

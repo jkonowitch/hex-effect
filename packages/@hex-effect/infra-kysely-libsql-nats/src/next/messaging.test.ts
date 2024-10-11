@@ -1,4 +1,4 @@
-import { describe, expect, layer } from '@effect/vitest';
+import { beforeEach, describe, expect, layer } from '@effect/vitest';
 import {
   Effect,
   Config,
@@ -8,7 +8,8 @@ import {
   Fiber,
   Chunk,
   Console,
-  ConfigProvider
+  ConfigProvider,
+  Deferred
 } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { NatsClient, NatsEventConsumer, PublishEvent } from './messaging.js';
@@ -58,35 +59,51 @@ const TestLive = PublishEvent.Default.pipe(
 
 describe('Messaging', () => {
   layer(TestLive)((it) => {
-    const e = SomeEvent.make({ name: 'Jeff' });
-    const event = UnpublishedEventRecord.make({
-      ...e,
-      payload: JSON.stringify(e)
+    let e: (typeof SomeEvent)['schema']['Type'];
+
+    const publish = (e: (typeof SomeEvent)['schema']['Type']) =>
+      PublishEvent.publish(
+        UnpublishedEventRecord.make({
+          ...e,
+          payload: JSON.stringify(e)
+        })
+      );
+
+    beforeEach(() => {
+      e = SomeEvent.make({ name: 'Jeff' });
     });
 
     it.scoped('it can publish', () =>
       Effect.gen(function* () {
         const conn = yield* NatsClient;
-        const sub = conn.subscribe(`kralf.${event._context}.${event._tag}`, {
-          timeout: 2000,
-          max: 1
-        });
-        yield* PublishEvent.publish(event);
+        const sub = conn.subscribe(
+          `${yield* Config.string('APPLICATION_NAMESPACE')}.${e._context}.${e._tag}`,
+          {
+            timeout: 2000,
+            max: 1
+          }
+        );
+        yield* publish(e);
         const stream = yield* Stream.fromAsyncIterable(sub, () => new Error('uh oh')).pipe(
           Stream.runCollect,
           Effect.fork
         );
         const msg = yield* Fiber.join(stream).pipe(Effect.flatMap(Chunk.get(0)));
-        expect(msg.string()).toEqual(event.payload);
+        expect(msg.string()).toEqual(JSON.stringify(e));
       })
     );
 
-    it.effect('EventConsumer', () =>
+    it.scoped.only('EventConsumer', () =>
       Effect.gen(function* () {
-        const handler = yield* NatsEventConsumer.use((c) =>
-          c.register([SomeEvent], (e) => Console.log('recieved', e), { $durableName: 'shmee' })
+        const deferred = yield* Deferred.make<typeof e>();
+        yield* NatsEventConsumer.use((c) =>
+          c.register([SomeEvent], (e) => Deferred.succeed(deferred, e), { $durableName: 'shmee' })
         ).pipe(Effect.fork);
-        yield* Fiber.await(handler);
+        console.log(e);
+        yield* Effect.yieldNow();
+        yield* publish(e);
+        const kralf = yield* Deferred.await(deferred);
+        yield* Console.log(kralf);
       }).pipe(Effect.provide(NatsEventConsumer.Default))
     );
   });
