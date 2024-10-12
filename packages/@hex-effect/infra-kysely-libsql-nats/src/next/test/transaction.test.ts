@@ -1,81 +1,16 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import {
-  Effect,
-  Config,
-  Context,
-  Layer,
-  String,
-  identity,
-  Stream,
-  Fiber,
-  pipe,
-  ConfigProvider
-} from 'effect';
-import { GenericContainer, type StartedTestContainer } from 'testcontainers';
+import { Effect, Context, Layer, identity, Stream, Fiber, pipe } from 'effect';
 import { Schema } from '@effect/schema';
 import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
-import {
-  GetUnpublishedEvents,
-  UseCaseCommit,
-  WriteStatement,
-  WithTransactionLive,
-  LibsqlSdk,
-  EventStoreLive
-} from './index.js';
+import { GetUnpublishedEvents, EventStoreLive } from '../event-store.js';
 import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
-
-export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
-  LibsqlContainer,
-  StartedTestContainer
->() {
-  static ContainerLive = Layer.scoped(
-    this,
-    Effect.acquireRelease(
-      Effect.promise(() =>
-        new GenericContainer('ghcr.io/tursodatabase/libsql-server:main')
-          .withExposedPorts(8080)
-          .withEnvironment({ SQLD_NODE: 'primary' })
-          .withCommand(['sqld', '--no-welcome', '--http-listen-addr', '0.0.0.0:8080'])
-          .start()
-      ),
-      (container) => Effect.promise(() => container.stop())
-    )
-  );
-
-  private static ClientLive = Layer.unwrapEffect(
-    LibsqlSdk.pipe(
-      Effect.andThen(({ sdk }) =>
-        LibsqlClient.layer({
-          liveClient: Config.succeed(sdk),
-          transformQueryNames: Config.succeed(String.camelToSnake),
-          transformResultNames: Config.succeed(String.snakeToCamel)
-        })
-      )
-    )
-  );
-
-  private static ConfigLive = Layer.unwrapEffect(
-    LibsqlContainer.pipe(
-      Effect.andThen((container) =>
-        Layer.setConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([['TURSO_URL', `http://localhost:${container.getMappedPort(8080)}`]])
-          )
-        )
-      )
-    )
-  );
-
-  static Live = this.ClientLive.pipe(
-    Layer.provideMerge(LibsqlSdk.Default),
-    Layer.provide(this.ConfigLive),
-    Layer.provide(this.ContainerLive)
-  );
-}
+import { LibsqlSdk, WriteStatement } from '../sql.js';
+import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
+import { LibsqlContainer } from './util.js';
 
 const PersonCreatedEvent = makeDomainEvent(
   { _tag: 'PersonCreatedEvent', _context: '@test' },

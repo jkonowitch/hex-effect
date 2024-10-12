@@ -28,10 +28,10 @@ import {
 } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
 import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
-import type { UnpublishedEventRecord } from './index.js';
 import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
 import { constTrue, constVoid, pipe } from 'effect/Function';
+import type { UnpublishedEventRecord } from './event-store.js';
 
 class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
   '@hex-effect/EstablishedJetstream',

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, layer } from '@effect/vitest';
 import {
   Effect,
   Config,
-  Context,
   Layer,
   Stream,
   Fiber,
@@ -11,40 +10,12 @@ import {
   Deferred,
   pipe
 } from 'effect';
-import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
-import { NatsClient, NatsEventConsumer, PublishEvent } from './messaging.js';
-import { UnpublishedEventRecord } from './index.js';
+import { NatsClient, NatsEventConsumer, PublishEvent } from '../messaging.js';
+import { UnpublishedEventRecord } from '../event-store.js';
 import { makeDomainEvent } from '@hex-effect/core';
 import { Schema } from '@effect/schema';
 import { omit } from 'effect/Struct';
-
-class NatsContainer extends Context.Tag('test/NatsContainer')<
-  NatsContainer,
-  StartedTestContainer
->() {
-  static Live = Layer.scoped(
-    this,
-    Effect.acquireRelease(
-      Effect.promise(() =>
-        new GenericContainer('nats:latest')
-          .withCommand(['-js'])
-          .withExposedPorts(4222)
-          .withWaitStrategy(Wait.forLogMessage(/.*Server is ready.*/))
-          .start()
-      ),
-      (container) => Effect.promise(() => container.stop())
-    )
-  );
-
-  static ClientLive = Layer.unwrapEffect(
-    Effect.gen(function* () {
-      const container = yield* NatsContainer;
-      return NatsClient.layer({
-        servers: Config.succeed(`nats://localhost:${container.getMappedPort(4222)}`)
-      });
-    })
-  ).pipe(Layer.provide(this.Live));
-}
+import { NatsContainer } from './util.js';
 
 const SomeEvent = makeDomainEvent(
   { _tag: 'SomeEvent', _context: 'SomeContext' },
