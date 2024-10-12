@@ -224,7 +224,7 @@ export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
     );
 }
 
-class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
+export class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {
     return e instanceof RawNatsError;
   }
