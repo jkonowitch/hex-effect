@@ -36,7 +36,7 @@ export const LibsqlClientLive = Layer.unwrapEffect(
       })
     )
   )
-).pipe(Layer.provideMerge(LibsqlSdk.Default));
+);
 
 export class WriteStatement extends Context.Tag('WriteStatement')<
   WriteStatement,

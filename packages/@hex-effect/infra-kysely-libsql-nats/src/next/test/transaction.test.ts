@@ -99,7 +99,8 @@ const TestLive = Migrations.pipe(
   // provide/merge UseCaseCommit & GetUnpublishedEvents so that I can test behavior
   Layer.provideMerge(UseCaseCommit.live),
   Layer.provideMerge(GetUnpublishedEvents.live),
-  Layer.provideMerge(WithTransactionLive)
+  Layer.provideMerge(WithTransactionLive),
+  Layer.provideMerge(LibsqlSdk.Default)
 );
 
 describe('WithTransaction', () => {
