@@ -1,18 +1,23 @@
-import { Config, Context, Effect, identity, Layer } from 'effect';
+import { Config, Context, Effect, identity, Layer, String } from 'effect';
 import { type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
-import { createClient } from '@libsql/client';
+import { createClient, type Config as LibsqlClientConfig } from '@libsql/client';
+import { LibsqlClient } from '@effect/sql-libsql';
 
 class _WriteExecutor extends Context.Tag('@hex-effect/_WriteExecutor')<
   _WriteExecutor,
   (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
 >() {}
 
+export const LibsqlConfig = Context.GenericTag<{ config: Config.Config.Wrap<LibsqlClientConfig> }>(
+  '@hex/effect/LibsqlClientConfig'
+);
+
 export class LibsqlSdk extends Effect.Service<LibsqlSdk>()('@hex-effect/LibsqlSdk', {
   scoped: Effect.gen(function* () {
-    const url = yield* Config.string('TURSO_URL');
+    const config = yield* LibsqlConfig.pipe(Effect.flatMap(({ config }) => Config.unwrap(config)));
     const sdk = yield* Effect.acquireRelease(
-      Effect.sync(() => createClient({ url })),
+      Effect.sync(() => createClient(config)),
       (a) => Effect.sync(() => a.close())
     );
 
@@ -20,6 +25,18 @@ export class LibsqlSdk extends Effect.Service<LibsqlSdk>()('@hex-effect/LibsqlSd
   }),
   accessors: true
 }) {}
+
+export const LibsqlClientLive = Layer.unwrapEffect(
+  LibsqlSdk.pipe(
+    Effect.andThen(({ sdk }) =>
+      LibsqlClient.layer({
+        liveClient: Config.succeed(sdk),
+        transformQueryNames: Config.succeed(String.camelToSnake),
+        transformResultNames: Config.succeed(String.snakeToCamel)
+      })
+    )
+  )
+).pipe(Layer.provideMerge(LibsqlSdk.Default));
 
 export class WriteStatement extends Context.Tag('WriteStatement')<
   WriteStatement,

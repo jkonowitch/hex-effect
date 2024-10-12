@@ -1,7 +1,6 @@
-import { Effect, Config, Context, Layer, String, ConfigProvider } from 'effect';
+import { Effect, Config, Context, Layer } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
-import { LibsqlClient } from '@effect/sql-libsql';
-import { LibsqlSdk } from '../sql.js';
+import { LibsqlClientLive, LibsqlConfig } from '../sql.js';
 import { NatsClient } from '../messaging.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
@@ -22,32 +21,18 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
     )
   );
 
-  private static ClientLive = Layer.unwrapEffect(
-    LibsqlSdk.pipe(
-      Effect.andThen(({ sdk }) =>
-        LibsqlClient.layer({
-          liveClient: Config.succeed(sdk),
-          transformQueryNames: Config.succeed(String.camelToSnake),
-          transformResultNames: Config.succeed(String.snakeToCamel)
-        })
-      )
-    )
-  );
-
-  private static ConfigLive = Layer.unwrapEffect(
+  private static ConfigLive = Layer.effect(
+    LibsqlConfig,
     LibsqlContainer.pipe(
-      Effect.andThen((container) =>
-        Layer.setConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([['TURSO_URL', `http://localhost:${container.getMappedPort(8080)}`]])
-          )
-        )
-      )
+      Effect.andThen((container) => ({
+        config: {
+          url: Config.succeed(`http://localhost:${container.getMappedPort(8080)}`)
+        }
+      }))
     )
   );
 
-  static Live = this.ClientLive.pipe(
-    Layer.provideMerge(LibsqlSdk.Default),
+  static Live = LibsqlClientLive.pipe(
     Layer.provide(this.ConfigLive),
     Layer.provide(this.ContainerLive)
   );
