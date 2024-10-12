@@ -64,38 +64,36 @@ export const UnpublishedEventRecord = Schema.Struct({
   ...EventRecordInsert.pick('payload').fields
 });
 
-class SaveEvents extends Context.Tag('@hex-effect/libsql/save-events')<
-  SaveEvents,
-  (e: EncodableEventBase[]) => Effect.Effect<void, ParseError | SqlError>
->() {
-  public static live = Layer.effect(
-    this,
-    Effect.zip(SqlClient.SqlClient, WriteStatement).pipe(
-      Effect.map(
-        ([sql, write]) =>
-          (events: EncodableEventBase[]) =>
-            Effect.forEach(
-              events,
-              (e) =>
-                e.encode().pipe(
-                  Effect.flatMap((e) =>
-                    Schema.encode(EventRecordInsert)({
-                      delivered: false,
-                      messageId: e.messageId,
-                      occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn),
-                      payload: JSON.stringify(e)
-                    })
-                  ),
-                  Effect.andThen((e) => write(sql`insert into hex_effect_events ${sql.insert(e)};`))
-                ),
-              {
-                concurrency: 'unbounded'
-              }
-            )
-      )
-    )
-  );
-}
+class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
+  effect: Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const write = yield* WriteStatement;
+
+    const save = (events: EncodableEventBase[]) =>
+      Effect.forEach(
+        events,
+        (e) =>
+          e.encode().pipe(
+            Effect.flatMap((e) =>
+              Schema.encode(EventRecordInsert)({
+                delivered: false,
+                messageId: e.messageId,
+                occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn),
+                payload: JSON.stringify(e)
+              })
+            ),
+            Effect.andThen((e) => write(sql`insert into hex_effect_events ${sql.insert(e)};`))
+          ),
+        {
+          concurrency: 'unbounded'
+        }
+      );
+
+    return { save };
+  }),
+  dependencies: [WriteStatement.live],
+  accessors: true
+}) {}
 
 export class GetUnpublishedEvents extends Context.Tag('@hex-effect/libsql/GetUnpublishedEvents')<
   GetUnpublishedEvents,
@@ -132,7 +130,7 @@ export const EventStoreLive = Layer.unwrapEffect(
       );`.compile();
     yield* Effect.promise(() => sdk.migrate([{ sql: ensureEventTableStmt, args: [] }]));
 
-    return Layer.mergeAll(SaveEvents.live, GetUnpublishedEvents.live);
+    return Layer.mergeAll(SaveEvents.Default, GetUnpublishedEvents.live);
   })
 );
 
@@ -144,7 +142,7 @@ export const WithTransactionLive = Layer.effect(
     const client = yield* LibsqlClient.LibsqlClient;
     const sdk = yield* LibsqlSdk.sdk;
 
-    const save = yield* SaveEvents;
+    const { save } = yield* SaveEvents;
     const pub = yield* UseCaseCommit;
     return <A extends EncodableEventBase[], E, R>(
       useCase: Effect.Effect<A, E, R>,
