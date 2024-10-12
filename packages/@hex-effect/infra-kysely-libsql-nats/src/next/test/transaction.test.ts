@@ -5,7 +5,7 @@ import { Schema } from '@effect/schema';
 import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { GetUnpublishedEvents, EventStoreLive } from '../event-store.js';
+import { GetUnpublishedEvents } from '../event-store.js';
 import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { LibsqlSdk, WriteStatement } from '../sql.js';
@@ -95,16 +95,15 @@ const Migrations = Layer.scopedDiscard(
   })
 );
 
-const TestLive = Layer.merge(
-  Migrations,
-  WithTransactionLive.pipe(
-    Layer.provideMerge(UseCaseCommit.live),
-    Layer.provideMerge(EventStoreLive)
-  )
+const TestLive = Migrations.pipe(
+  // provide/merge UseCaseCommit & GetUnpublishedEvents so that I can test behavior
+  Layer.provideMerge(UseCaseCommit.live),
+  Layer.provideMerge(GetUnpublishedEvents.live),
+  Layer.provideMerge(WithTransactionLive)
 );
 
 describe('WithTransaction', () => {
-  layer(LibsqlContainer.Live)((it) => {
+  layer(LibsqlContainer.ConfigLive)((it) => {
     const countCommits = Effect.serviceConstants(UseCaseCommit).subscribe.pipe(
       Effect.andThen((queue) => Stream.fromQueue(queue).pipe(Stream.runCount, Effect.fork))
     );

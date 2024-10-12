@@ -1,4 +1,4 @@
-import { Config, Context, Effect, identity, Layer, String } from 'effect';
+import { Config, Console, Context, Effect, identity, Layer, String } from 'effect';
 import { type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { createClient, type Config as LibsqlClientConfig } from '@libsql/client';
@@ -35,7 +35,7 @@ export const LibsqlClientLive = Layer.unwrapEffect(
         transformResultNames: Config.succeed(String.snakeToCamel)
       })
     )
-  )
+  ).pipe(Effect.tap(Console.log('building')))
 ).pipe(Layer.provideMerge(LibsqlSdk.Default));
 
 export class WriteStatement extends Context.Tag('WriteStatement')<

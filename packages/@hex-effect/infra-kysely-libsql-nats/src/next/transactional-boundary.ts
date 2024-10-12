@@ -9,7 +9,7 @@ import { type Statement } from '@effect/sql';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { type InValue } from '@libsql/client';
 import { isTagged } from 'effect/Predicate';
-import { LibsqlSdk, WriteStatement } from './sql.js';
+import { LibsqlClientLive, LibsqlSdk, WriteStatement } from './sql.js';
 import { EventStoreLive, SaveEvents } from './event-store.js';
 
 const isTaggedError = (e: unknown) => isTagged(e, 'SqlError') || isTagged(e, 'ParseError');
@@ -77,5 +77,6 @@ export const WithTransactionLive = Layer.effect(
 ).pipe(
   Layer.provide(EventStoreLive),
   Layer.provideMerge(WriteStatement.live),
-  Layer.provide(UseCaseCommit.live)
+  Layer.provide(UseCaseCommit.live),
+  Layer.provideMerge(LibsqlClientLive)
 );

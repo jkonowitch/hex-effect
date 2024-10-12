@@ -1,13 +1,13 @@
 import { Effect, Config, Context, Layer } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
-import { LibsqlClientLive, LibsqlConfig } from '../sql.js';
+import { LibsqlConfig } from '../sql.js';
 import { NatsClient } from '../messaging.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
   StartedTestContainer
 >() {
-  static ContainerLive = Layer.scoped(
+  private static ContainerLive = Layer.scoped(
     this,
     Effect.acquireRelease(
       Effect.promise(() =>
@@ -21,7 +21,7 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
     )
   );
 
-  private static ConfigLive = Layer.effect(
+  public static ConfigLive = Layer.effect(
     LibsqlConfig,
     LibsqlContainer.pipe(
       Effect.andThen((container) => ({
@@ -30,12 +30,7 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
         }
       }))
     )
-  );
-
-  static Live = LibsqlClientLive.pipe(
-    Layer.provide(this.ConfigLive),
-    Layer.provide(this.ContainerLive)
-  );
+  ).pipe(Layer.provide(this.ContainerLive));
 }
 
 export class NatsContainer extends Context.Tag('test/NatsContainer')<
