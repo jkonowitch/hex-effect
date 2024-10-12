@@ -1,6 +1,17 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Context, Layer, String, identity, Stream, Fiber, pipe } from 'effect';
+import {
+  Effect,
+  Config,
+  Context,
+  Layer,
+  String,
+  identity,
+  Stream,
+  Fiber,
+  pipe,
+  ConfigProvider
+} from 'effect';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { Schema } from '@effect/schema';
 import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
@@ -16,13 +27,12 @@ import {
 } from './index.js';
 import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
-import { createClient } from '@libsql/client';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
   StartedTestContainer
 >() {
-  static Live = Layer.scoped(
+  static ContainerLive = Layer.scoped(
     this,
     Effect.acquireRelease(
       Effect.promise(() =>
@@ -36,25 +46,35 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
     )
   );
 
-  static ClientLive = Layer.unwrapScoped(
-    Effect.gen(function* () {
-      const container = yield* LibsqlContainer;
-      const sdk = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          createClient({ url: `http://localhost:${container.getMappedPort(8080)}` })
-        ),
-        (c) => Effect.sync(() => c.close())
-      );
-      return Layer.merge(
+  private static ClientLive = Layer.unwrapEffect(
+    LibsqlSdk.pipe(
+      Effect.andThen(({ sdk }) =>
         LibsqlClient.layer({
           liveClient: Config.succeed(sdk),
           transformQueryNames: Config.succeed(String.camelToSnake),
           transformResultNames: Config.succeed(String.snakeToCamel)
-        }),
-        Layer.succeed(LibsqlSdk, new LibsqlSdk({ sdk }))
-      );
-    })
-  ).pipe(Layer.provide(this.Live));
+        })
+      )
+    )
+  );
+
+  private static ConfigLive = Layer.unwrapEffect(
+    LibsqlContainer.pipe(
+      Effect.andThen((container) =>
+        Layer.setConfigProvider(
+          ConfigProvider.fromMap(
+            new Map([['TURSO_URL', `http://localhost:${container.getMappedPort(8080)}`]])
+          )
+        )
+      )
+    )
+  );
+
+  static Live = this.ClientLive.pipe(
+    Layer.provideMerge(LibsqlSdk.Default),
+    Layer.provide(this.ConfigLive),
+    Layer.provide(this.ContainerLive)
+  );
 }
 
 const PersonCreatedEvent = makeDomainEvent(
@@ -149,7 +169,7 @@ const TestLive = Layer.merge(
 );
 
 describe('WithTransaction', () => {
-  layer(LibsqlContainer.ClientLive)((it) => {
+  layer(LibsqlContainer.Live)((it) => {
     const countCommits = Effect.serviceConstants(UseCaseCommit).subscribe.pipe(
       Effect.andThen((queue) => Stream.fromQueue(queue).pipe(Stream.runCount, Effect.fork))
     );
