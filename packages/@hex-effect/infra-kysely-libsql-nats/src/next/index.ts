@@ -5,7 +5,7 @@ import {
   type EncodableEventBase,
   EventBaseSchema
 } from '@hex-effect/core';
-import { Config, Context, Effect, Layer, Option, PubSub, Ref } from 'effect';
+import { Config, Context, Effect, identity, Layer, PubSub, Ref } from 'effect';
 import { SqlClient, type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { LibsqlClient } from '@effect/sql-libsql';
@@ -17,9 +17,7 @@ import { isTagged } from 'effect/Predicate';
 class _WriteExecutor extends Context.Tag('@hex-effect/_WriteExecutor')<
   _WriteExecutor,
   (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
->() {
-  public static live = Layer.succeed(this, (stm) => stm);
-}
+>() {}
 
 export class LibsqlSdk extends Effect.Service<LibsqlSdk>()('@hex-effect/LibsqlSdk', {
   scoped: Effect.gen(function* () {
@@ -40,10 +38,10 @@ export class WriteStatement extends Context.Tag('WriteStatement')<
 >() {
   public static live = Layer.succeed(WriteStatement, (stm) =>
     Effect.serviceOption(_WriteExecutor).pipe(
-      Effect.map(Option.getOrThrowWith(() => new Error('WriteExecutor not initialized'))),
+      Effect.map((_) => (_._tag === 'None' ? identity : _.value)),
       Effect.andThen((wr) => wr(stm))
     )
-  ).pipe(Layer.provideMerge(_WriteExecutor.live));
+  );
 }
 
 const BoolFromNumber = Schema.transform(Schema.Number, Schema.Boolean, {
@@ -136,6 +134,13 @@ export const EventStoreLive = Layer.unwrapEffect(
 
 const isTaggedError = (e: unknown) => isTagged(e, 'SqlError') || isTagged(e, 'ParseError');
 
+export class UseCaseCommit extends Context.Tag('@hex-effect/UseCaseCommit')<
+  UseCaseCommit,
+  PubSub.PubSub<void>
+>() {
+  public static live = Layer.effect(UseCaseCommit, PubSub.sliding<void>(10));
+}
+
 export const WithTransactionLive = Layer.effect(
   WithTransaction,
   Effect.gen(function* () {
@@ -191,11 +196,8 @@ export const WithTransactionLive = Layer.effect(
       return program.pipe(Effect.tap(() => pub.publish()));
     };
   })
+).pipe(
+  Layer.provide(EventStoreLive),
+  Layer.provideMerge(WriteStatement.live),
+  Layer.provide(UseCaseCommit.live)
 );
-
-export class UseCaseCommit extends Context.Tag('@hex-effect/UseCaseCommit')<
-  UseCaseCommit,
-  PubSub.PubSub<void>
->() {
-  public static live = Layer.effect(UseCaseCommit, PubSub.sliding<void>(10));
-}

@@ -7,12 +7,12 @@ import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
 import {
-  EventStoreLive,
   GetUnpublishedEvents,
   UseCaseCommit,
   WriteStatement,
   WithTransactionLive,
-  LibsqlSdk
+  LibsqlSdk,
+  EventStoreLive
 } from './index.js';
 import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
@@ -140,12 +140,11 @@ const Migrations = Layer.scopedDiscard(
   })
 );
 
-const TestLive = Layer.mergeAll(
+const TestLive = Layer.merge(
   Migrations,
   WithTransactionLive.pipe(
     Layer.provideMerge(UseCaseCommit.live),
-    Layer.provideMerge(EventStoreLive),
-    Layer.provideMerge(WriteStatement.live)
+    Layer.provideMerge(EventStoreLive)
   )
 );
 
