@@ -1,17 +1,15 @@
 import { Model, SqlClient, SqlError } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Context, Layer, identity, Stream, Fiber, pipe } from 'effect';
+import { Effect, Context, Layer, identity, Stream, Fiber, pipe, Struct, Array } from 'effect';
 import { Schema } from '@effect/schema';
 import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
-import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { LibsqlSdk, WriteStatement } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
 import { LibsqlContainer } from './util.js';
-import { map } from 'effect/Array';
 
 const PersonCreatedEvent = makeDomainEvent(
   { _tag: 'PersonCreatedEvent', _context: '@test' },
@@ -83,9 +81,9 @@ const Migrations = Layer.scopedDiscard(
       yield* Effect.promise(() =>
         sdk.migrate([
           `PRAGMA foreign_keys=OFF;`,
-          ...dropTriggerCmds.map(get('cmd')),
-          ...dropIndexCmds.map(get('cmd')),
-          ...dropTableCmds.map(get('cmd')),
+          ...dropTriggerCmds.map(Struct.get('cmd')),
+          ...dropIndexCmds.map(Struct.get('cmd')),
+          ...dropTableCmds.map(Struct.get('cmd')),
           `DELETE FROM hex_effect_events`,
           `PRAGMA foreign_keys=ON;`
         ])
@@ -160,7 +158,7 @@ describe('WithTransaction', () => {
         const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
         expect(
           Schema.decodeUnknownSync(PersonCreatedEvent.schema)(JSON.parse(events.at(0)!.payload))
-        ).toEqual(pipe(event!, omit('encode')));
+        ).toEqual(pipe(event!, Struct.omit('encode')));
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
       }).pipe(Effect.provide(TestLive))
@@ -180,20 +178,21 @@ describe('WithTransaction', () => {
         const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
         expect(
           Schema.decodeUnknownSync(PersonCreatedEvent.schema)(JSON.parse(events.at(0)!.payload))
-        ).toEqual(pipe(event!, omit('encode')));
+        ).toEqual(pipe(event!, Struct.omit('encode')));
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
       }).pipe(Effect.provide(TestLive))
+    );
+
+    const unpublishedMessageIds = GetUnpublishedEvents.pipe(
+      Effect.flatMap((getUnpublished) => getUnpublished()),
+      Effect.map(Array.map(Struct.get('messageId')))
     );
 
     it.effect('marks as published', () =>
       Effect.gen(function* () {
         const event = PersonCreatedEvent.make({ id: '123' });
         yield* SaveEvents.save([event]);
-        const unpublishedMessageIds = GetUnpublishedEvents.pipe(
-          Effect.flatMap((getUnpublished) => getUnpublished()),
-          Effect.map(map(get('messageId')))
-        );
         expect(yield* unpublishedMessageIds).toContain(event.messageId);
         yield* MarkAsPublished.markAsPublished([event.messageId]);
         expect(yield* unpublishedMessageIds).not.toContain(event.messageId);
