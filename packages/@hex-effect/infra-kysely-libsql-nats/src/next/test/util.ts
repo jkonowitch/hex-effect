@@ -4,7 +4,7 @@ import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
 import { NatsClient } from '../messaging.js';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { Schema } from '@effect/schema';
-import { Model, SqlError, SqlClient } from '@effect/sql';
+import { Model, SqlError, SqlClient, SqlResolver } from '@effect/sql';
 import { makeDomainEvent } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
@@ -92,12 +92,11 @@ export const resetDatabase = Effect.gen(function* () {
   );
 }).pipe(Effect.orDie);
 
+const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
 export const PersonCreatedEvent = makeDomainEvent(
   { _tag: 'PersonCreatedEvent', _context: '@test' },
-  { id: Schema.String }
+  { id: PersonId }
 );
-
-const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
 
 const PersonDomainModel = Schema.Struct({
   id: PersonId,
@@ -141,6 +140,17 @@ export const addPerson = (name: string) =>
     yield* save(person);
     return [PersonCreatedEvent.make({ id: person.id })];
   }).pipe(Effect.provide(SavePerson.live));
+
+export const GetByIdResolver = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+
+  return yield* SqlResolver.findById('GetPersonById', {
+    Id: PersonId,
+    Result: PersonSQLModel.select,
+    ResultId: (result) => result.id,
+    execute: (ids) => sql`SELECT * FROM people WHERE id IN ${sql.in(ids)};`
+  });
+});
 
 export const Migrations = Layer.scopedDiscard(
   Effect.gen(function* () {
