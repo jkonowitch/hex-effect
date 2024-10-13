@@ -4,26 +4,21 @@ import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from './event-store
 import { PublishEvent } from './messaging.js';
 import { constVoid } from 'effect/Function';
 
+const publishPipeline = pipe(
+  GetUnpublishedEvents,
+  Effect.flatMap((getUnpublished) => getUnpublished()),
+  Effect.tap((events) => Effect.forEach(events, PublishEvent.publish)),
+  Effect.map(Array.map(Struct.get('messageId'))),
+  Effect.flatMap(MarkAsPublished.markAsPublished)
+);
+
 export const EventPublisherDaemon = Layer.scopedDiscard(
-  Effect.gen(function* () {
-    const commitStream = yield* Effect.serviceConstants(UseCaseCommit).subscribe.pipe(
-      Effect.map(Stream.fromQueue)
-    );
-
-    const publish = pipe(
-      GetUnpublishedEvents,
-      Effect.flatMap((getUnpublished) => getUnpublished()),
-      Effect.tap((events) => Effect.forEach(events, PublishEvent.publish)),
-      Effect.map(Array.map(Struct.get('messageId'))),
-      Effect.flatMap(MarkAsPublished.markAsPublished),
-      Effect.as(constVoid())
-    );
-
-    yield* commitStream.pipe(
-      Stream.runForEach(() => publish),
-      Effect.forkScoped
-    );
-  })
+  Effect.serviceConstants(UseCaseCommit).subscribe.pipe(
+    Effect.map(Stream.fromQueue),
+    Effect.flatMap(Stream.runForEach(() => publishPipeline)),
+    Effect.forkScoped,
+    Effect.as(constVoid())
+  )
 ).pipe(
   Layer.provide(SaveEvents.Default),
   Layer.provide(GetUnpublishedEvents.live),
