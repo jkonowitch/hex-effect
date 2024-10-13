@@ -11,6 +11,7 @@ import { LibsqlClient } from '@effect/sql-libsql';
 import { LibsqlSdk, WriteStatement } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
 import { LibsqlContainer } from './util.js';
+import { map } from 'effect/Array';
 
 const PersonCreatedEvent = makeDomainEvent(
   { _tag: 'PersonCreatedEvent', _context: '@test' },
@@ -189,10 +190,13 @@ describe('WithTransaction', () => {
       Effect.gen(function* () {
         const event = PersonCreatedEvent.make({ id: '123' });
         yield* SaveEvents.save([event]);
-        const getUnpublished = yield* GetUnpublishedEvents;
-        expect((yield* getUnpublished()).map(get('messageId'))).toContain(event.messageId);
+        const unpublishedMessageIds = GetUnpublishedEvents.pipe(
+          Effect.flatMap((getUnpublished) => getUnpublished()),
+          Effect.map(map(get('messageId')))
+        );
+        expect(yield* unpublishedMessageIds).toContain(event.messageId);
         yield* MarkAsPublished.markAsPublished([event.messageId]);
-        expect((yield* getUnpublished()).map(get('messageId'))).not.toContain(event.messageId);
+        expect(yield* unpublishedMessageIds).not.toContain(event.messageId);
       }).pipe(Effect.provide(TestLive))
     );
   });
