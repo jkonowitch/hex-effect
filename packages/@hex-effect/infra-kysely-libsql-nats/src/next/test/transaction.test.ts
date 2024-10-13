@@ -9,7 +9,7 @@ import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-stor
 import { LibsqlClient } from '@effect/sql-libsql';
 import { LibsqlSdk, WriteStatement } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
-import { LibsqlContainer } from './util.js';
+import { LibsqlContainer, resetDatabase } from './util.js';
 
 const PersonCreatedEvent = makeDomainEvent(
   { _tag: 'PersonCreatedEvent', _context: '@test' },
@@ -64,32 +64,7 @@ const addPerson = (name: string) =>
 const Migrations = Layer.scopedDiscard(
   Effect.gen(function* () {
     const sql = yield* LibsqlClient.LibsqlClient;
-    const sdk = yield* LibsqlSdk.sdk;
-
     const migrateDatabase = sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
-
-    const resetDatabase = Effect.gen(function* () {
-      const dropTableCmds = yield* sql<{
-        cmd: string;
-      }>`SELECT 'DROP TABLE ' || name || ';' as cmd FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'hex_effect_events';`;
-      const dropTriggerCmds = yield* sql<{
-        cmd: string;
-      }>`SELECT 'DROP TRIGGER IF EXISTS ' || name || ';' as cmd FROM sqlite_master WHERE type='trigger';`;
-      const dropIndexCmds = yield* sql<{
-        cmd: string;
-      }>`SELECT 'DROP INDEX IF EXISTS ' || name || ';'as cmd FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'hex_effect_%';`;
-      yield* Effect.promise(() =>
-        sdk.migrate([
-          `PRAGMA foreign_keys=OFF;`,
-          ...dropTriggerCmds.map(Struct.get('cmd')),
-          ...dropIndexCmds.map(Struct.get('cmd')),
-          ...dropTableCmds.map(Struct.get('cmd')),
-          `DELETE FROM hex_effect_events`,
-          `PRAGMA foreign_keys=ON;`
-        ])
-      );
-    }).pipe(Effect.orDie);
-
     yield* Effect.acquireRelease(migrateDatabase, () => resetDatabase);
   })
 );

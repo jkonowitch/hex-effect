@@ -1,7 +1,8 @@
-import { Effect, Config, Context, Layer } from 'effect';
+import { Effect, Config, Context, Layer, Struct } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
-import { LibsqlConfig } from '../sql.js';
+import { LibsqlConfig, LibsqlSdk } from '../sql.js';
 import { NatsClient } from '../messaging.js';
+import { LibsqlClient } from '@effect/sql-libsql';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -60,3 +61,28 @@ export class NatsContainer extends Context.Tag('test/NatsContainer')<
     })
   ).pipe(Layer.provide(this.Live));
 }
+
+export const resetDatabase = Effect.gen(function* () {
+  const sql = yield* LibsqlClient.LibsqlClient;
+  const sdk = yield* LibsqlSdk.sdk;
+
+  const dropTableCmds = yield* sql<{
+    cmd: string;
+  }>`SELECT 'DROP TABLE ' || name || ';' as cmd FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'hex_effect_events';`;
+  const dropTriggerCmds = yield* sql<{
+    cmd: string;
+  }>`SELECT 'DROP TRIGGER IF EXISTS ' || name || ';' as cmd FROM sqlite_master WHERE type='trigger';`;
+  const dropIndexCmds = yield* sql<{
+    cmd: string;
+  }>`SELECT 'DROP INDEX IF EXISTS ' || name || ';'as cmd FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'hex_effect_%';`;
+  yield* Effect.promise(() =>
+    sdk.migrate([
+      `PRAGMA foreign_keys=OFF;`,
+      ...dropTriggerCmds.map(Struct.get('cmd')),
+      ...dropIndexCmds.map(Struct.get('cmd')),
+      ...dropTableCmds.map(Struct.get('cmd')),
+      `DELETE FROM hex_effect_events`,
+      `PRAGMA foreign_keys=ON;`
+    ])
+  );
+}).pipe(Effect.orDie);
