@@ -1,8 +1,8 @@
 import { Array, Effect, Layer, pipe, Stream, Struct } from 'effect';
+import { constVoid } from 'effect/Function';
 import { UseCaseCommit } from './transactional-boundary.js';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from './event-store.js';
 import { PublishEvent } from './messaging.js';
-import { constVoid } from 'effect/Function';
 
 const publishPipeline = pipe(
   GetUnpublishedEvents,

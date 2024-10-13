@@ -1,13 +1,13 @@
 import { Effect, Config, Context, Layer, Struct } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
-import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
-import { NatsClient } from '../messaging.js';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { Schema } from '@effect/schema';
 import { Model, SqlError, SqlClient, SqlResolver } from '@effect/sql';
 import { makeDomainEvent } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
+import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
+import { NatsClient } from '../messaging.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,

@@ -10,11 +10,11 @@ import {
   Deferred,
   pipe
 } from 'effect';
-import { NatsClient, NatsEventConsumer, PublishEvent } from '../messaging.js';
-import { UnpublishedEventRecord } from '../event-store.js';
 import { makeDomainEvent } from '@hex-effect/core';
 import { Schema } from '@effect/schema';
 import { omit } from 'effect/Struct';
+import { NatsClient, NatsEventConsumer, PublishEvent } from '../messaging.js';
+import { UnpublishedEventRecord } from '../event-store.js';
 import { NatsContainer } from './util.js';
 
 const SomeEvent = makeDomainEvent(
