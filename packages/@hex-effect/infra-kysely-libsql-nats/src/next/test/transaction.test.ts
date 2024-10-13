@@ -1,76 +1,15 @@
-import { Model, SqlClient, SqlError } from '@effect/sql';
+import { SqlClient } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Context, Layer, identity, Stream, Fiber, pipe, Struct, Array } from 'effect';
+import { Effect, Layer, identity, Stream, Fiber, pipe, Struct, Array } from 'effect';
 import { Schema } from '@effect/schema';
-import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
-import { nanoid } from 'nanoid';
-import type { ParseError } from '@effect/schema/ParseResult';
+import { IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
-import { LibsqlClient } from '@effect/sql-libsql';
-import { LibsqlSdk, WriteStatement } from '../sql.js';
+import { LibsqlSdk } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
-import { LibsqlContainer, resetDatabase } from './util.js';
-
-const PersonCreatedEvent = makeDomainEvent(
-  { _tag: 'PersonCreatedEvent', _context: '@test' },
-  { id: Schema.String }
-);
-
-const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
-
-const PersonDomainModel = Schema.Struct({
-  id: PersonId,
-  name: Schema.Trim.pipe(Schema.compose(Schema.NonEmptyString))
-});
-
-class PersonSQLModel extends Model.Class<PersonSQLModel>('PersonSQLModel')({
-  ...PersonDomainModel.fields,
-  id: Model.GeneratedByApp(PersonId),
-  createdAt: Model.DateTimeInsertFromNumber,
-  updatedAt: Model.DateTimeUpdateFromNumber
-}) {}
-
-class SavePerson extends Context.Tag('test/SavePerson')<
-  SavePerson,
-  (person: typeof PersonDomainModel.Type) => Effect.Effect<void, SqlError.SqlError | ParseError>
->() {
-  public static live = Layer.effect(
-    this,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const w = yield* WriteStatement;
-      return (person) =>
-        Effect.gen(function* () {
-          const insert = yield* Schema.encode(PersonSQLModel.insert)(
-            PersonSQLModel.insert.make(person)
-          );
-          yield* w(sql`insert into people ${sql.insert(insert)};`);
-        });
-    })
-  );
-}
-
-const addPerson = (name: string) =>
-  Effect.gen(function* () {
-    const person = yield* Schema.decode(PersonDomainModel)({
-      name,
-      id: PersonId.make(nanoid())
-    });
-    const save = yield* SavePerson;
-    yield* save(person);
-    return [PersonCreatedEvent.make({ id: person.id })];
-  }).pipe(Effect.provide(SavePerson.live));
-
-const Migrations = Layer.scopedDiscard(
-  Effect.gen(function* () {
-    const sql = yield* LibsqlClient.LibsqlClient;
-    const migrateDatabase = sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
-    yield* Effect.acquireRelease(migrateDatabase, () => resetDatabase);
-  })
-);
+import { addPerson, LibsqlContainer, Migrations, PersonCreatedEvent } from './util.js';
 
 const TestLive = Migrations.pipe(
-  // provide/merge UseCaseCommit & GetUnpublishedEvents so that I can test behavior
+  // provide/merge all these internal services so that I can test behavior
   Layer.provideMerge(UseCaseCommit.live),
   Layer.provideMerge(GetUnpublishedEvents.live),
   Layer.provideMerge(SaveEvents.Default),

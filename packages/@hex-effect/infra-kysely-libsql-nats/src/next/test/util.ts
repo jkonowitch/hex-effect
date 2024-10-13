@@ -1,8 +1,13 @@
 import { Effect, Config, Context, Layer, Struct } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
-import { LibsqlConfig, LibsqlSdk } from '../sql.js';
+import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
 import { NatsClient } from '../messaging.js';
 import { LibsqlClient } from '@effect/sql-libsql';
+import { Schema } from '@effect/schema';
+import { Model, SqlError, SqlClient } from '@effect/sql';
+import { makeDomainEvent } from '@hex-effect/core';
+import { nanoid } from 'nanoid';
+import type { ParseError } from '@effect/schema/ParseResult';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -86,3 +91,61 @@ export const resetDatabase = Effect.gen(function* () {
     ])
   );
 }).pipe(Effect.orDie);
+
+export const PersonCreatedEvent = makeDomainEvent(
+  { _tag: 'PersonCreatedEvent', _context: '@test' },
+  { id: Schema.String }
+);
+
+const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
+
+const PersonDomainModel = Schema.Struct({
+  id: PersonId,
+  name: Schema.Trim.pipe(Schema.compose(Schema.NonEmptyString))
+});
+
+class PersonSQLModel extends Model.Class<PersonSQLModel>('PersonSQLModel')({
+  ...PersonDomainModel.fields,
+  id: Model.GeneratedByApp(PersonId),
+  createdAt: Model.DateTimeInsertFromNumber,
+  updatedAt: Model.DateTimeUpdateFromNumber
+}) {}
+
+class SavePerson extends Context.Tag('test/SavePerson')<
+  SavePerson,
+  (person: typeof PersonDomainModel.Type) => Effect.Effect<void, SqlError.SqlError | ParseError>
+>() {
+  public static live = Layer.effect(
+    this,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const w = yield* WriteStatement;
+      return (person) =>
+        Effect.gen(function* () {
+          const insert = yield* Schema.encode(PersonSQLModel.insert)(
+            PersonSQLModel.insert.make(person)
+          );
+          yield* w(sql`insert into people ${sql.insert(insert)};`);
+        });
+    })
+  );
+}
+
+export const addPerson = (name: string) =>
+  Effect.gen(function* () {
+    const person = yield* Schema.decode(PersonDomainModel)({
+      name,
+      id: PersonId.make(nanoid())
+    });
+    const save = yield* SavePerson;
+    yield* save(person);
+    return [PersonCreatedEvent.make({ id: person.id })];
+  }).pipe(Effect.provide(SavePerson.live));
+
+export const Migrations = Layer.scopedDiscard(
+  Effect.gen(function* () {
+    const sql = yield* LibsqlClient.LibsqlClient;
+    const migrateDatabase = sql`create table people (id text primary key not null, name text not null, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
+    yield* Effect.acquireRelease(migrateDatabase, () => resetDatabase);
+  })
+);
