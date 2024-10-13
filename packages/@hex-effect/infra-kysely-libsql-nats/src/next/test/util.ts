@@ -92,7 +92,8 @@ export const resetDatabase = Effect.gen(function* () {
   );
 }).pipe(Effect.orDie);
 
-const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
+export const PersonId = Schema.NonEmptyTrimmedString.pipe(Schema.brand('PersonId'));
+
 export const PersonCreatedEvent = makeDomainEvent(
   { _tag: 'PersonCreatedEvent', _context: '@test' },
   { id: PersonId }

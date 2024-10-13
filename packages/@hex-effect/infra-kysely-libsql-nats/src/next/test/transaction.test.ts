@@ -6,7 +6,7 @@ import { IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
 import { LibsqlSdk } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
-import { addPerson, LibsqlContainer, Migrations, PersonCreatedEvent } from './util.js';
+import { addPerson, LibsqlContainer, Migrations, PersonCreatedEvent, PersonId } from './util.js';
 
 const TestLive = Migrations.pipe(
   // provide/merge all these internal services so that I can test behavior
@@ -105,7 +105,7 @@ describe('WithTransaction', () => {
 
     it.effect('marks as published', () =>
       Effect.gen(function* () {
-        const event = PersonCreatedEvent.make({ id: '123' });
+        const event = PersonCreatedEvent.make({ id: PersonId.make('123') });
         yield* SaveEvents.save([event]);
         expect(yield* unpublishedMessageIds).toContain(event.messageId);
         yield* MarkAsPublished.markAsPublished([event.messageId]);
