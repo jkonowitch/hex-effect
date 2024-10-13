@@ -79,6 +79,18 @@ export class GetUnpublishedEvents extends Context.Tag('@hex-effect/libsql/GetUnp
   );
 }
 
+export class MarkAsPublished extends Effect.Service<MarkAsPublished>()('MarkAsPublished', {
+  effect: Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+
+    const markAsPublished = (ids: (typeof UnpublishedEventRecord)['Type']['messageId'][]) =>
+      sql`update hex_effect_events set delivered = 1 where message_id in ${sql.in(ids)};`;
+
+    return { markAsPublished };
+  }),
+  accessors: true
+}) {}
+
 export const EventStoreLive = Layer.unwrapEffect(
   Effect.gen(function* () {
     const sql = yield* LibsqlClient.LibsqlClient;

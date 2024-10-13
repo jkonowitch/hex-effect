@@ -5,7 +5,7 @@ import { Schema } from '@effect/schema';
 import { makeDomainEvent, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { GetUnpublishedEvents } from '../event-store.js';
+import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
 import { get, omit } from 'effect/Struct';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { LibsqlSdk, WriteStatement } from '../sql.js';
@@ -99,6 +99,8 @@ const TestLive = Migrations.pipe(
   // provide/merge UseCaseCommit & GetUnpublishedEvents so that I can test behavior
   Layer.provideMerge(UseCaseCommit.live),
   Layer.provideMerge(GetUnpublishedEvents.live),
+  Layer.provideMerge(SaveEvents.Default),
+  Layer.provideMerge(MarkAsPublished.Default),
   Layer.provideMerge(WithTransactionLive),
   Layer.provideMerge(LibsqlSdk.Default)
 );
@@ -180,6 +182,17 @@ describe('WithTransaction', () => {
         ).toEqual(pipe(event!, omit('encode')));
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
+      }).pipe(Effect.provide(TestLive))
+    );
+
+    it.effect('marks as published', () =>
+      Effect.gen(function* () {
+        const event = PersonCreatedEvent.make({ id: '123' });
+        yield* SaveEvents.save([event]);
+        const getUnpublished = yield* GetUnpublishedEvents;
+        expect((yield* getUnpublished()).map(get('messageId'))).toContain(event.messageId);
+        yield* MarkAsPublished.markAsPublished([event.messageId]);
+        expect((yield* getUnpublished()).map(get('messageId'))).not.toContain(event.messageId);
       }).pipe(Effect.provide(TestLive))
     );
   });
