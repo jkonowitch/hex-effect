@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { Schema } from '@effect/schema';
-import type { ParseError } from '@effect/schema/ParseResult';
+import { Serializable } from '@effect/schema';
+import type { Struct } from '@effect/schema/Schema';
 import { Context, Data, Effect } from 'effect';
 import { nanoid } from 'nanoid';
 
@@ -20,15 +21,15 @@ export const EventBaseSchema = Schema.Struct({
 
 export type EncodableEventBase = Encodable<typeof EventBaseSchema>;
 
-type Encodable<Z extends Schema.Schema<any, any, any>> = Z['Type'] & {
-  encode: () => Effect.Effect<Z['Encoded'], ParseError, never>;
+export type Encodable<Z extends Schema.Schema<any, any, any>> = Z['Type'] & {
+  readonly [Serializable.symbol]: Z;
 };
 
-type EventSchemas = {
-  schema: Schema.Schema<any, any, any>;
+export type EventSchemas<F extends Struct.Fields, Z extends Schema.Struct<F>> = {
+  schema: Z;
   metadata: Pick<typeof EventBaseSchema.Type, '_context' | '_tag'>;
   _tag: 'EventSchema';
-  make: (...args: any[]) => Encodable<Schema.Schema<any, any, any>>;
+  make: (...args: Parameters<Z['make']>) => Encodable<Z>;
 };
 
 /**
@@ -47,17 +48,22 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
     )
   });
 
-  const encode = Schema.encode(schema);
-
-  return {
+  const domainEvent: EventSchemas<typeof schema.fields, typeof schema> = {
     schema,
     make: (...args: Parameters<typeof schema.make>) => {
       const made = schema.make(...args);
-      return { ...made, encode: () => encode(made) };
+      return {
+        ...made,
+        get [Serializable.symbol]() {
+          return schema;
+        }
+      };
     },
     metadata,
     _tag: 'EventSchema'
-  } as const satisfies EventSchemas;
+  } as const;
+
+  return domainEvent;
 };
 
 /**
@@ -67,7 +73,11 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
   EventConsumer,
   {
-    register<E extends EventSchemas[], Err, Req>(
+    register<
+      E extends EventSchemas<typeof EventBaseSchema.fields, typeof EventBaseSchema>[],
+      Err,
+      Req
+    >(
       eventSchemas: E,
       handler: (e: E[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
