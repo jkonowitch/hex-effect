@@ -11,6 +11,12 @@
     "@repo/typescript-config": "workspace:*",
     "testcontainers": "^10.13.1"
   },
+  "files": [
+    "bin/"
+  ],
+  "bin": {
+    "geni": "./bin/geni"
+  },
   "type": "module",
   "peerDependencies": {
     "effect": ">=3.9",
