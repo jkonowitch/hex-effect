@@ -67,7 +67,7 @@ importers:
         specifier: workspace:*
         version: link:../../../../../packages/@repo/typescript-config
 
-  examples/todo-app/contexts/@projects-next/core:
+  examples/todo-app/contexts/@projects-next/domain:
     dependencies:
       '@hex-effect/core':
         specifier: workspace:*
