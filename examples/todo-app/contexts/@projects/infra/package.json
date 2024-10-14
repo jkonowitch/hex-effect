@@ -16,7 +16,7 @@
     "kysely-ctl": "^0.8.9"
   },
   "dependencies": {
-    "@hex-effect/infra-kysely-libsql-nats": "workspace:*",
+    "@hex-effect/infra-libsql-nats": "workspace:*",
     "@hex-effect/core": "workspace:*",
     "@libsql/client": "~0.14.0",
     "@projects/application": "workspace:*",

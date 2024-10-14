@@ -72,9 +72,9 @@ importers:
       '@hex-effect/core':
         specifier: workspace:*
         version: link:../../../../../packages/@hex-effect/core
-      '@hex-effect/infra-kysely-libsql-nats':
+      '@hex-effect/infra-libsql-nats':
         specifier: workspace:*
-        version: link:../../../../../packages/@hex-effect/infra-kysely-libsql-nats
+        version: link:../../../../../packages/@hex-effect/infra-libsql-nats
       '@projects/domain':
         specifier: workspace:*
         version: link:../domain
@@ -104,9 +104,9 @@ importers:
       '@hex-effect/core':
         specifier: workspace:*
         version: link:../../../../../packages/@hex-effect/core
-      '@hex-effect/infra-kysely-libsql-nats':
+      '@hex-effect/infra-libsql-nats':
         specifier: workspace:*
-        version: link:../../../../../packages/@hex-effect/infra-kysely-libsql-nats
+        version: link:../../../../../packages/@hex-effect/infra-libsql-nats
       '@libsql/client':
         specifier: ~0.14.0
         version: 0.14.0
@@ -246,7 +246,7 @@ importers:
         specifier: workspace:*
         version: link:../../@repo/typescript-config
 
-  packages/@hex-effect/infra-kysely-libsql-nats:
+  packages/@hex-effect/infra-libsql-nats:
     dependencies:
       '@effect/schema':
         specifier: '>=0.75.0'
