@@ -1,10 +1,10 @@
-import { type EncodableEventBase, EventBaseSchema } from '@hex-effect/core';
+import { type Encodable, EventBaseSchema } from '@hex-effect/core';
 import { Context, Effect, Layer } from 'effect';
 import { SqlClient } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { LibsqlClient } from '@effect/sql-libsql';
 import type { ParseError } from '@effect/schema/ParseResult';
-import { Schema } from '@effect/schema';
+import { Schema, Serializable } from '@effect/schema';
 import { LibsqlSdk, WriteStatement } from './sql.js';
 
 const BoolFromNumber = Schema.transform(Schema.Number, Schema.Boolean, {
@@ -30,16 +30,17 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
     const sql = yield* SqlClient.SqlClient;
     const write = yield* WriteStatement;
 
-    const save = (events: EncodableEventBase[]) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const save = (events: Encodable<any>[]) =>
       Effect.forEach(
         events,
         (e) =>
-          e.encode().pipe(
+          Serializable.serialize(e).pipe(
             Effect.flatMap((e) =>
               Schema.encode(EventRecordInsert)({
                 delivered: false,
-                messageId: e.messageId,
-                occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn),
+                messageId: e.messageId as string,
+                occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn as string),
                 payload: JSON.stringify(e)
               })
             ),
@@ -48,7 +49,7 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
         {
           concurrency: 'unbounded'
         }
-      );
+      ) as Effect.Effect<void[], SqlError | ParseError, never>;
 
     return { save };
   }),

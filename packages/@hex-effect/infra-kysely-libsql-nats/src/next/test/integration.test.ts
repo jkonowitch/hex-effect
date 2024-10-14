@@ -47,7 +47,7 @@ describe('Integration Test', () => {
 
       // ensure event is received
       const received = yield* Deferred.await(deferred);
-      expect(received).toEqual(Struct.omit(event!, 'encode'));
+      expect(event).toMatchObject(received);
     }).pipe(Effect.provide(Migrations), Effect.provide(runtime))
   );
 });

@@ -25,11 +25,11 @@ export type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
   readonly [Serializable.symbol]: Schema.Struct<F>;
 };
 
-export type EventSchemas<F extends Struct.Fields, Z extends Schema.Struct<F>> = {
-  schema: Z;
+export type EventSchemas<F extends Struct.Fields> = {
+  schema: Schema.Struct<F>;
   metadata: Pick<typeof EventBaseSchema.Type, '_context' | '_tag'>;
   _tag: 'EventSchema';
-  make: (...args: Parameters<Z['make']>) => Encodable<F>;
+  make: (...args: Parameters<Schema.Struct<F>['make']>) => Encodable<F>;
 };
 
 /**
@@ -48,7 +48,7 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
     )
   });
 
-  const domainEvent: EventSchemas<typeof schema.fields, typeof schema> = {
+  const domainEvent: EventSchemas<typeof schema.fields> = {
     schema,
     make: (...args: Parameters<typeof schema.make>) => {
       const made = schema.make(...args);
@@ -73,13 +73,9 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
   EventConsumer,
   {
-    register<
-      E extends EventSchemas<typeof EventBaseSchema.fields, typeof EventBaseSchema>[],
-      Err,
-      Req
-    >(
-      eventSchemas: E,
-      handler: (e: E[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
+    register<F extends Struct.Fields, Err, Req>(
+      eventSchemas: EventSchemas<F>[],
+      handler: (e: EventSchemas<F>[][number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
     ): Effect.Effect<void, never, Req>;
   }

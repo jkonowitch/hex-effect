@@ -1,6 +1,6 @@
 import { SqlClient } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Layer, identity, Stream, Fiber, pipe, Struct, Array } from 'effect';
+import { Effect, Layer, identity, Stream, Fiber, Struct, Array } from 'effect';
 import { Schema } from '@effect/schema';
 import { IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
@@ -70,9 +70,9 @@ describe('WithTransaction', () => {
         }>`select * from people;`;
         expect(res.at(0)!.name).toEqual('Kralf');
         const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
-        expect(
+        expect(event).toMatchObject(
           Schema.decodeUnknownSync(PersonCreatedEvent.schema)(JSON.parse(events.at(0)!.payload))
-        ).toEqual(pipe(event!, Struct.omit('encode')));
+        );
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
       }).pipe(Effect.provide(TestLive))
@@ -90,9 +90,9 @@ describe('WithTransaction', () => {
         }>`select * from people;`;
         expect(res.at(0)!.name).toEqual('Kralf');
         const events = yield* Effect.serviceFunctionEffect(GetUnpublishedEvents, identity)();
-        expect(
+        expect(event).toMatchObject(
           Schema.decodeUnknownSync(PersonCreatedEvent.schema)(JSON.parse(events.at(0)!.payload))
-        ).toEqual(pipe(event!, Struct.omit('encode')));
+        );
         yield* Effect.serviceConstants(UseCaseCommit).shutdown;
         expect(yield* Fiber.join(count)).toEqual(1);
       }).pipe(Effect.provide(TestLive))
@@ -106,7 +106,7 @@ describe('WithTransaction', () => {
     it.effect('marks as published', () =>
       Effect.gen(function* () {
         const event = PersonCreatedEvent.make({ id: PersonId.make('123') });
-        yield* SaveEvents.save([event]);
+        yield* SaveEvents.use((service) => service.save([event]));
         expect(yield* unpublishedMessageIds).toContain(event.messageId);
         yield* MarkAsPublished.markAsPublished([event.messageId]);
         expect(yield* unpublishedMessageIds).not.toContain(event.messageId);

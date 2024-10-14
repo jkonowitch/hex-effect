@@ -111,10 +111,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       const supervisor = yield* EventConsumerSupervisor;
 
       const register: (typeof EventConsumer.Service)['register'] = (schema, handler, config) => {
-        const allSchemas = Schema.Union(...schema.map(get('schema'))) as Schema.Schema<
-          unknown,
-          unknown
-        >;
+        const allSchemas = Schema.Union(...schema.map(get('schema'))) as typeof EventBaseSchema;
         const subjects = schema.map((s) =>
           Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
         );
