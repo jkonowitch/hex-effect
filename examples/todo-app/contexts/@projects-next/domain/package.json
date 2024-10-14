@@ -20,7 +20,7 @@
       "default": "./dist/index.js"
     },
     "default": {
-      "default": "./index.ts"
+      "default": "./src/index.ts"
     }
   }
 }

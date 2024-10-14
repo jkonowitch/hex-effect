@@ -10,5 +10,14 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*"
   },
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "default": {
+      "default": "./src/index.ts"
+    }
+  }
 }
