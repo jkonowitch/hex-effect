@@ -68,6 +68,10 @@ importers:
         version: link:../../../../../packages/@repo/typescript-config
 
   examples/todo-app/contexts/@projects-next/core:
+    dependencies:
+      '@hex-effect/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/core
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
