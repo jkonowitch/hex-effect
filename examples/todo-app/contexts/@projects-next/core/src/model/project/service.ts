@@ -1,14 +1,15 @@
-import { Effect, Random } from 'effect';
+import { Effect } from 'effect';
 import { Project, ProjectCreatedEvent, ProjectId } from './model.js';
+import { UUIDGenerator } from '@hex-effect/core';
 
 export const createProject = (
   title: string
 ): Effect.Effect<
   [typeof Project.Type, ReturnType<typeof ProjectCreatedEvent.make>],
   never,
-  Random.Random
+  UUIDGenerator
 > =>
-  Effect.serviceConstants(Random.Random).next.pipe(
-    Effect.map((rand) => Project.make({ title, id: ProjectId.make(`${rand}`) })),
+  UUIDGenerator.generate().pipe(
+    Effect.map((uuid) => Project.make({ title, id: ProjectId.make(uuid) })),
     Effect.map((project) => [project, ProjectCreatedEvent.make({ id: project.id })] as const)
   );

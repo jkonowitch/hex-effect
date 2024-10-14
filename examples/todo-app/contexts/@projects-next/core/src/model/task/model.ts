@@ -8,7 +8,7 @@ export const TaskId = Schema.String.pipe(Schema.brand('TaskId'));
 export const Task = Schema.Struct({
   projectId: ProjectId,
   id: TaskId,
-  description: Schema.String,
+  description: Schema.NonEmptyString,
   completed: Schema.Boolean.pipe(
     Schema.propertySignature,
     Schema.withConstructorDefault(() => false)

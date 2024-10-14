@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { Schema } from '@effect/schema';
 import { Serializable } from '@effect/schema';
 import type { Struct } from '@effect/schema/Schema';
@@ -22,6 +20,7 @@ export const EventBaseSchema = Schema.Struct({
 type DomainEventTag = { __type: 'DomainEvent' };
 
 export type EncodableEventBase = typeof EventBaseSchema.Type & {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
 } & DomainEventTag;
 
@@ -75,6 +74,7 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
   EventConsumer,
   {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     register<S extends EventSchemas<any>[], Err, Req>(
       eventSchemas: S,
       handler: (e: S[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
@@ -82,6 +82,15 @@ export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
     ): Effect.Effect<void, never, Req>;
   }
 >() {}
+
+export class UUIDGenerator extends Effect.Service<UUIDGenerator>()('@hex-effect/UUIDGenerator', {
+  succeed: {
+    generate() {
+      return nanoid();
+    }
+  } as const,
+  accessors: true
+}) {}
 
 export enum IsolationLevel {
   ReadCommitted = 'ReadCommitted',

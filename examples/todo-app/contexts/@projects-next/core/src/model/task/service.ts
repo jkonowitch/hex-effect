@@ -1,10 +1,11 @@
-import { Effect, Random } from 'effect';
+import { Effect } from 'effect';
 import { Task, TaskAddedEvent, TaskCompletedEvent, TaskId } from './model.js';
 import type { Project } from '../project/model.js';
+import { UUIDGenerator } from '@hex-effect/core';
 
 const makeWithUUID = (args: Omit<Parameters<(typeof Task)['make']>[0], 'id'>) =>
-  Effect.serviceConstants(Random.Random).next.pipe(
-    Effect.map((rand) => Task.make({ ...args, id: TaskId.make(`${rand}`) }))
+  UUIDGenerator.generate().pipe(
+    Effect.map((uuid) => Task.make({ ...args, id: TaskId.make(uuid) }))
   );
 
 export const addTaskToProject = (
@@ -13,7 +14,7 @@ export const addTaskToProject = (
 ): Effect.Effect<
   [typeof Task.Type, ReturnType<typeof TaskAddedEvent.make>],
   never,
-  Random.Random
+  UUIDGenerator
 > =>
   makeWithUUID({ projectId: project.id, description }).pipe(
     Effect.map(
