@@ -13,5 +13,14 @@
   "dependencies": {
     "@hex-effect/core": "workspace:*"
   },
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "default": {
+      "default": "./index.ts"
+    }
+  }
 }
