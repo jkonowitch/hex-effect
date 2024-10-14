@@ -23,7 +23,7 @@ export type EncodableEventBase = typeof EventBaseSchema.Type & {
   readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
 };
 
-export type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
+type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
   readonly [Serializable.symbol]: Schema.Struct<F>;
 };
 

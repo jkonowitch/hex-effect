@@ -1,5 +1,5 @@
 import { type EncodableEventBase, EventBaseSchema } from '@hex-effect/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, pipe } from 'effect';
 import { SqlClient } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { LibsqlClient } from '@effect/sql-libsql';
@@ -30,12 +30,12 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
     const sql = yield* SqlClient.SqlClient;
     const write = yield* WriteStatement;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const save = <A extends EncodableEventBase>(events: A[]) =>
       Effect.forEach(
         events,
         (e) =>
-          Serializable.serialize(e).pipe(
+          pipe(
+            Serializable.serialize(e),
             Effect.flatMap((e) =>
               Schema.encode(EventRecordInsert)({
                 delivered: false,
@@ -44,12 +44,12 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
                 payload: JSON.stringify(e)
               })
             ),
-            Effect.andThen((e) => write(sql`insert into hex_effect_events ${sql.insert(e)};`))
+            Effect.flatMap((e) => write(sql`insert into hex_effect_events ${sql.insert(e)};`))
           ),
         {
           concurrency: 'unbounded'
         }
-      ) as Effect.Effect<void[], SqlError | ParseError, never>;
+      );
 
     return { save };
   }),

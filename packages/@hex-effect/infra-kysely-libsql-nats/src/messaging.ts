@@ -27,7 +27,7 @@ import {
   type JsMsg
 } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
-import { EventBaseSchema, type EventSchemas } from '@hex-effect/core';
+import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
 import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
 import { constTrue, constVoid, pipe } from 'effect/Function';
@@ -110,13 +110,19 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       const ctx = yield* Effect.context<EstablishedJetstream>();
       const supervisor = yield* EventConsumerSupervisor;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const register = <F extends EventSchemas<any>[], Err, Req>(
-        eventSchemas: F,
-        handler: (e: F[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
-        config: { $durableName: string }
+      const register: (typeof EventConsumer.Service)['register'] = (
+        eventSchemas,
+        handler,
+        config
       ) => {
-        const allSchemas = Schema.Union(...eventSchemas.map(get('schema')));
+        const allSchemas = Schema.Union(...eventSchemas.map(get('schema'))) as Schema.Schema<
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          any,
+          // remove the `unknown` context.
+          never
+        >;
         const subjects = eventSchemas.map((s) =>
           Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
         );
@@ -149,7 +155,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
                     : // could make this exponential
                       Effect.sync(() => m.nak(m.info.redeliveryCount * 1000))
               })
-          ).pipe(Effect.ignoreLogged) as Effect.Effect<void, never, never>;
+          ).pipe(Effect.ignoreLogged);
 
         return supervisor.track(stream, processMessage);
       };
