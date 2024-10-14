@@ -1,5 +1,5 @@
 {
-  "name": "@hex-effect/infra-kysely-libsql-nats",
+  "name": "@hex-effect/infra-libsql-nats",
   "version": "0.1.0",
   "scripts": {
     "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
