@@ -19,13 +19,15 @@ export const EventBaseSchema = Schema.Struct({
   )
 });
 
+type DomainEventTag = { __type: 'DomainEvent' };
+
 export type EncodableEventBase = typeof EventBaseSchema.Type & {
   readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
-};
+} & DomainEventTag;
 
 type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
   readonly [Serializable.symbol]: Schema.Struct<F>;
-};
+} & DomainEventTag;
 
 export type EventSchemas<F extends Struct.Fields> = {
   schema: Schema.Struct<F>;
@@ -52,15 +54,13 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 
   const domainEvent: EventSchemas<typeof schema.fields> = {
     schema,
-    make: (...args: Parameters<typeof schema.make>) => {
-      const made = schema.make(...args);
-      return {
-        ...made,
-        get [Serializable.symbol]() {
-          return schema;
-        }
-      };
-    },
+    make: (...args: Parameters<typeof schema.make>) => ({
+      ...schema.make(...args),
+      get [Serializable.symbol]() {
+        return schema;
+      },
+      __type: 'DomainEvent'
+    }),
     metadata,
     _tag: 'EventSchema'
   } as const;
