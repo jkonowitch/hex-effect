@@ -1,0 +1,21 @@
+services:
+  libsql:
+    image: ghcr.io/tursodatabase/libsql-server:main
+    ports:
+      - '8080:8080'
+    environment:
+      SQLD_NODE: primary
+    command: ['sqld', '--no-welcome', '--http-listen-addr', '0.0.0.0:8080']
+    volumes:
+      - libsql-data:/var/lib/sqld
+  nats:
+    image: nats
+    ports:
+      - '4222:4222'
+    command: '-js -sd /data'
+    volumes:
+      - nats-data:/data
+
+volumes:
+  libsql-data:
+  nats-data:
