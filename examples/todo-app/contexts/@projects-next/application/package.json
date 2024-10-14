@@ -1,0 +1,18 @@
+{
+  "name": "@projects-next/application",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "dependencies": {
+    "@hex-effect/core": "workspace:*",
+    "@projects-next/domain": "workspace:*"
+  },
+  "type": "module"
+}
