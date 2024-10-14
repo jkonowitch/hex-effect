@@ -96,6 +96,28 @@ importers:
         specifier: workspace:*
         version: link:../../../../../packages/@repo/typescript-config
 
+  examples/todo-app/contexts/@projects-next/infra:
+    dependencies:
+      '@hex-effect/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/core
+      '@hex-effect/infra-libsql-nats':
+        specifier: workspace:*
+        version: link:../../../../../packages/@hex-effect/infra-libsql-nats
+      '@projects-next/application':
+        specifier: workspace:*
+        version: link:../application
+      '@projects-next/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/config-eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../../../../packages/@repo/typescript-config
+
   examples/todo-app/contexts/@projects/application:
     dependencies:
       '@hex-effect/core':
