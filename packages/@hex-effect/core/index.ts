@@ -1,20 +1,14 @@
 import { Schema } from '@effect/schema';
 import { Serializable } from '@effect/schema';
 import type { Struct } from '@effect/schema/Schema';
-import { Context, Data, Effect } from 'effect';
+import { Clock, Context, Data, Effect } from 'effect';
 import { nanoid } from 'nanoid';
 
 export const EventBaseSchema = Schema.Struct({
   _context: Schema.String,
   _tag: Schema.String,
-  occurredOn: Schema.Date.pipe(
-    Schema.propertySignature,
-    Schema.withConstructorDefault(() => new Date())
-  ),
-  messageId: Schema.String.pipe(
-    Schema.propertySignature,
-    Schema.withConstructorDefault(() => nanoid())
-  )
+  occurredOn: Schema.Date,
+  messageId: Schema.String
 });
 
 type DomainEventTag = { __type: 'DomainEvent' };
@@ -24,7 +18,7 @@ export type EncodableEventBase = typeof EventBaseSchema.Type & {
   readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
 } & DomainEventTag;
 
-type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
+export type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
   readonly [Serializable.symbol]: Schema.Struct<F>;
 } & DomainEventTag;
 
@@ -32,7 +26,9 @@ export type EventSchemas<F extends Struct.Fields> = {
   schema: Schema.Struct<F>;
   metadata: Pick<typeof EventBaseSchema.Type, '_context' | '_tag'>;
   _tag: 'EventSchema';
-  make: (...args: Parameters<Schema.Struct<F>['make']>) => Encodable<F>;
+  make: (
+    args: Omit<Parameters<Schema.Struct<F>['make']>[0], 'messageId' | 'occurredOn'>
+  ) => Effect.Effect<Readonly<Encodable<F>>, never, UUIDGenerator>;
 };
 
 /**
@@ -53,13 +49,22 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 
   const domainEvent: EventSchemas<typeof schema.fields> = {
     schema,
-    make: (...args: Parameters<typeof schema.make>) => ({
-      ...schema.make(...args),
-      get [Serializable.symbol]() {
-        return schema;
-      },
-      __type: 'DomainEvent'
-    }),
+    make: (args) =>
+      Effect.gen(function* () {
+        const uuid = yield* UUIDGenerator.generate();
+        const date = new Date(yield* Clock.currentTimeMillis);
+        return {
+          ...schema.make({
+            ...(args as Parameters<typeof schema.make>[0]),
+            messageId: uuid,
+            occurredOn: date
+          }),
+          get [Serializable.symbol]() {
+            return schema;
+          },
+          __type: 'DomainEvent'
+        } as const;
+      }),
     metadata,
     _tag: 'EventSchema'
   } as const;
@@ -107,15 +112,15 @@ export class TransactionError extends Data.TaggedError('@hex-effect/TransactionE
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
   <E, R, A extends EncodableEventBase>(
-    eff: Effect.Effect<A[], E, R>,
+    eff: Effect.Effect<ReadonlyArray<A>, E, R>,
     isolationLevel: IsolationLevel
-  ) => Effect.Effect<A[], E | TransactionError, R>
+  ) => Effect.Effect<ReadonlyArray<A>, E | TransactionError, R>
 >() {}
 
 export function withTXBoundary(level: IsolationLevel) {
   return <E, R, A extends EncodableEventBase>(
-    useCase: Effect.Effect<A[], E, R>
-  ): Effect.Effect<A[], E | TransactionError, WithTransaction | R> =>
+    useCase: Effect.Effect<ReadonlyArray<A>, E, R>
+  ): Effect.Effect<ReadonlyArray<A>, E | TransactionError, WithTransaction | R> =>
     Effect.gen(function* () {
       const withTx = yield* WithTransaction;
       const events = yield* withTx(useCase, level);
