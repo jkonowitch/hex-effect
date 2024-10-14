@@ -19,7 +19,9 @@ export const EventBaseSchema = Schema.Struct({
   )
 });
 
-export type EncodableEventBase = Encodable<typeof EventBaseSchema.fields>;
+export type EncodableEventBase = typeof EventBaseSchema.Type & {
+  readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
+};
 
 export type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
   readonly [Serializable.symbol]: Schema.Struct<F>;
@@ -95,16 +97,16 @@ export class TransactionError extends Data.TaggedError('@hex-effect/TransactionE
 
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
-  <E, R, F extends Struct.Fields>(
-    eff: Effect.Effect<Encodable<F>[], E, R>,
+  <E, R, A extends EncodableEventBase>(
+    eff: Effect.Effect<A[], E, R>,
     isolationLevel: IsolationLevel
-  ) => Effect.Effect<Encodable<F>[], E | TransactionError, R>
+  ) => Effect.Effect<A[], E | TransactionError, R>
 >() {}
 
 export function withNextTXBoundary(level: IsolationLevel) {
-  return <E, R, F extends Struct.Fields>(
-    useCase: Effect.Effect<Encodable<F>[], E, R>
-  ): Effect.Effect<Encodable<F>[], E | TransactionError, WithTransaction | R> =>
+  return <E, R, A extends EncodableEventBase>(
+    useCase: Effect.Effect<A[], E, R>
+  ): Effect.Effect<A[], E | TransactionError, WithTransaction | R> =>
     Effect.gen(function* () {
       const withTx = yield* WithTransaction;
       const events = yield* withTx(useCase, level);

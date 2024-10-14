@@ -1,4 +1,4 @@
-import { type Encodable, EventBaseSchema } from '@hex-effect/core';
+import { type EncodableEventBase, EventBaseSchema } from '@hex-effect/core';
 import { Context, Effect, Layer } from 'effect';
 import { SqlClient } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
@@ -31,7 +31,7 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
     const write = yield* WriteStatement;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const save = (events: Encodable<any>[]) =>
+    const save = <A extends EncodableEventBase>(events: A[]) =>
       Effect.forEach(
         events,
         (e) =>
@@ -39,8 +39,8 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
             Effect.flatMap((e) =>
               Schema.encode(EventRecordInsert)({
                 delivered: false,
-                messageId: e.messageId as string,
-                occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn as string),
+                messageId: e.messageId,
+                occurredOn: Schema.decodeSync(Schema.DateFromString)(e.occurredOn),
                 payload: JSON.stringify(e)
               })
             ),

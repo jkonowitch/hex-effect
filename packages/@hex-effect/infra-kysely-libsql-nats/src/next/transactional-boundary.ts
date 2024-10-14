@@ -2,7 +2,7 @@ import {
   IsolationLevel,
   TransactionError,
   WithTransaction,
-  type Encodable
+  type EncodableEventBase
 } from '@hex-effect/core';
 import { Context, Effect, Layer, PubSub, Ref } from 'effect';
 import { type Statement } from '@effect/sql';
@@ -11,7 +11,6 @@ import { type InValue } from '@libsql/client';
 import { isTagged } from 'effect/Predicate';
 import { LibsqlClientLive, LibsqlSdk, WriteStatement } from './sql.js';
 import { EventStoreLive, SaveEvents } from './event-store.js';
-import type { Struct } from '@effect/schema/Schema';
 
 const isTaggedError = (e: unknown) => isTagged(e, 'SqlError') || isTagged(e, 'ParseError');
 
@@ -30,8 +29,8 @@ export const WithTransactionLive = Layer.effect(
 
     const { save } = yield* SaveEvents;
     const pub = yield* UseCaseCommit;
-    return <E, R, F extends Struct.Fields>(
-      useCase: Effect.Effect<Encodable<F>[], E, R>,
+    return <E, R, A extends EncodableEventBase>(
+      useCase: Effect.Effect<A[], E, R>,
       isolationLevel: IsolationLevel
     ) => {
       const useCaseWithEventStorage = useCase.pipe(
@@ -39,7 +38,7 @@ export const WithTransactionLive = Layer.effect(
         Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
       );
 
-      let program: Effect.Effect<Encodable<F>[], E | TransactionError, R>;
+      let program: Effect.Effect<A[], E | TransactionError, R>;
 
       if (isolationLevel === IsolationLevel.Batched) {
         program = Effect.gen(function* () {
