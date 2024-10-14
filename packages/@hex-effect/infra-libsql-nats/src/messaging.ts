@@ -8,6 +8,7 @@ import {
   Layer,
   Scope,
   Stream,
+  Struct,
   Supervisor
 } from 'effect';
 import {
@@ -29,22 +30,48 @@ import {
 import { Schema } from '@effect/schema';
 import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
 import { UnknownException } from 'effect/Cause';
-import { get } from 'effect/Struct';
 import { constTrue, constVoid, pipe } from 'effect/Function';
 import type { UnpublishedEventRecord } from './event-store.js';
+
+export const NatsConfig = Context.GenericTag<{
+  config: Config.Config.Wrap<ConnectionOptions>;
+  appNamespace: Config.Config<string>;
+}>('@hex-effect/NatsConfig');
+
+export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
+  NatsClient,
+  NatsConnection
+>() {
+  public static layer = Layer.scoped(
+    this,
+    Effect.gen(function* () {
+      const config = yield* NatsConfig.pipe(
+        Effect.map(Struct.get('config')),
+        Effect.flatMap(Config.unwrap)
+      );
+      return yield* Effect.acquireRelease(
+        Effect.promise(() => connect(config)),
+        (conn) => Effect.promise(() => conn.drain())
+      );
+    })
+  );
+}
 
 class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
   '@hex-effect/EstablishedJetstream',
   {
     accessors: true,
     effect: Effect.gen(function* () {
-      const applicationNamespace = yield* Config.string('APPLICATION_NAMESPACE');
+      const appNamespace = yield* NatsConfig.pipe(
+        Effect.map(Struct.get('appNamespace')),
+        Effect.flatMap(Config.unwrap)
+      );
       const conn = yield* NatsClient;
       const jsm = yield* Effect.promise(() => jetstreamManager(conn));
       const streamInfo = yield* callNats(
         jsm.streams.add({
-          name: applicationNamespace,
-          subjects: [`${applicationNamespace}.>`],
+          name: appNamespace,
+          subjects: [`${appNamespace}.>`],
           retention: RetentionPolicy.Interest
         })
       );
@@ -52,12 +79,13 @@ class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
         streamInfo,
         jsm,
         js: jetstream(conn),
-        applicationNamespace,
+        appNamespace,
         asSubject(e: typeof EventMetadata.Type): string {
-          return `${applicationNamespace}.${e._context}.${e._tag}`;
+          return `${appNamespace}.${e._context}.${e._tag}`;
         }
       } as const;
-    })
+    }),
+    dependencies: [NatsClient.layer]
   }
 ) {}
 
@@ -115,7 +143,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
         handler,
         config
       ) => {
-        const allSchemas = Schema.Union(...eventSchemas.map(get('schema'))) as Schema.Schema<
+        const allSchemas = Schema.Union(...eventSchemas.map(Struct.get('schema'))) as Schema.Schema<
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           any,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,24 +241,6 @@ const createStream = (consumerInfo: ConsumerInfo) =>
 
     return Stream.fromAsyncIterable(consumer, (e) => new Error(`${e}`));
   });
-
-export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
-  NatsClient,
-  NatsConnection
->() {
-  public static layer = (config: Config.Config.Wrap<ConnectionOptions>) =>
-    Layer.scoped(
-      this,
-      Config.unwrap(config).pipe(
-        Effect.flatMap((opts) =>
-          Effect.acquireRelease(
-            Effect.promise(() => connect(opts)),
-            (conn) => Effect.promise(() => conn.drain())
-          )
-        )
-      )
-    );
-}
 
 export class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
   static isNatsError(e: unknown): e is RawNatsError {

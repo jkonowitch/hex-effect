@@ -7,7 +7,7 @@ import { makeDomainEvent } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
 import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
-import { NatsClient } from '../messaging.js';
+import { NatsClient, NatsConfig } from '../messaging.js';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -43,7 +43,7 @@ export class NatsContainer extends Context.Tag('test/NatsContainer')<
   NatsContainer,
   StartedTestContainer
 >() {
-  static Live = Layer.scoped(
+  private static Live = Layer.scoped(
     this,
     Effect.acquireRelease(
       Effect.promise(() =>
@@ -57,14 +57,22 @@ export class NatsContainer extends Context.Tag('test/NatsContainer')<
     )
   );
 
-  static ClientLive = Layer.unwrapEffect(
-    Effect.gen(function* () {
-      const container = yield* NatsContainer;
-      return NatsClient.layer({
-        servers: Config.succeed(`nats://localhost:${container.getMappedPort(4222)}`)
-      });
-    })
-  ).pipe(Layer.provide(this.Live));
+  static ConfigLive = NatsClient.layer.pipe(
+    Layer.provideMerge(
+      Layer.unwrapEffect(
+        Effect.gen(function* () {
+          const container = yield* NatsContainer;
+          return Layer.succeed(NatsConfig, {
+            config: {
+              servers: Config.succeed(`nats://localhost:${container.getMappedPort(4222)}`)
+            },
+            appNamespace: Config.succeed('KRALF')
+          });
+        })
+      )
+    ),
+    Layer.provide(this.Live)
+  );
 }
 
 export const resetDatabase = Effect.gen(function* () {

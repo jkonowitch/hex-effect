@@ -1,8 +1,8 @@
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Layer, Stream, Fiber, Chunk, ConfigProvider, Deferred } from 'effect';
+import { Effect, Config, Layer, Stream, Fiber, Chunk, Deferred, Struct } from 'effect';
 import { makeDomainEvent, UUIDGenerator } from '@hex-effect/core';
 import { Schema } from '@effect/schema';
-import { NatsClient, NatsEventConsumer, PublishEvent } from '../messaging.js';
+import { NatsClient, NatsConfig, NatsEventConsumer, PublishEvent } from '../messaging.js';
 import { UnpublishedEventRecord } from '../event-store.js';
 import { NatsContainer } from './util.js';
 
@@ -13,10 +13,7 @@ const SomeEvent = makeDomainEvent(
 
 const TestLive = PublishEvent.Default.pipe(
   Layer.provideMerge(UUIDGenerator.Default),
-  Layer.provideMerge(NatsContainer.ClientLive),
-  Layer.provide(
-    Layer.setConfigProvider(ConfigProvider.fromMap(new Map([['APPLICATION_NAMESPACE', 'kralf']])))
-  )
+  Layer.provideMerge(NatsContainer.ConfigLive)
 );
 
 describe('Messaging', () => {
@@ -34,7 +31,9 @@ describe('Messaging', () => {
         const event = yield* SomeEvent.make({ name: 'Jeff' });
         const conn = yield* NatsClient;
         const sub = yield* Effect.acquireRelease(
-          Config.string('APPLICATION_NAMESPACE').pipe(
+          NatsConfig.pipe(
+            Effect.map(Struct.get('appNamespace')),
+            Effect.flatMap(Config.unwrap),
             Effect.flatMap((ns) =>
               Effect.sync(() =>
                 conn.subscribe(`${ns}.${event._context}.${event._tag}`, {
