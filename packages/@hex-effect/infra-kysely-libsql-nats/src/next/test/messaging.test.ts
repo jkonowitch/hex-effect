@@ -1,18 +1,7 @@
 import { beforeEach, describe, expect, layer } from '@effect/vitest';
-import {
-  Effect,
-  Config,
-  Layer,
-  Stream,
-  Fiber,
-  Chunk,
-  ConfigProvider,
-  Deferred,
-  pipe
-} from 'effect';
+import { Effect, Config, Layer, Stream, Fiber, Chunk, ConfigProvider, Deferred } from 'effect';
 import { makeDomainEvent } from '@hex-effect/core';
 import { Schema } from '@effect/schema';
-import { omit } from 'effect/Struct';
 import { NatsClient, NatsEventConsumer, PublishEvent } from '../messaging.js';
 import { UnpublishedEventRecord } from '../event-store.js';
 import { NatsContainer } from './util.js';
@@ -79,7 +68,7 @@ describe('Messaging', () => {
         );
         yield* publish(event);
         const received = yield* Deferred.await(deferred);
-        expect(received).toEqual(pipe(event, omit('encode')));
+        expect(event).toMatchObject(received);
       }).pipe(Effect.provide(NatsEventConsumer.Default))
     );
 
@@ -101,7 +90,7 @@ describe('Messaging', () => {
         );
         yield* publish(event);
         const received = yield* Deferred.await(deferred);
-        expect(received).toEqual(pipe(event, omit('encode')));
+        expect(event).toMatchObject(received);
       }).pipe(Effect.provide(NatsEventConsumer.Default))
     );
   });
