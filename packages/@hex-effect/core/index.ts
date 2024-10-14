@@ -75,9 +75,9 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
   EventConsumer,
   {
-    register<F extends Struct.Fields, Err, Req>(
-      eventSchemas: EventSchemas<F>[],
-      handler: (e: EventSchemas<F>[][number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
+    register<S extends EventSchemas<any>[], Err, Req>(
+      eventSchemas: S,
+      handler: (e: S[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
     ): Effect.Effect<void, never, Req>;
   }

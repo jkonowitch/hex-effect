@@ -32,7 +32,6 @@ import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
 import { constTrue, constVoid, pipe } from 'effect/Function';
 import type { UnpublishedEventRecord } from './event-store.js';
-import type { Struct } from '@effect/schema/Schema';
 
 class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
   '@hex-effect/EstablishedJetstream',
@@ -111,9 +110,10 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       const ctx = yield* Effect.context<EstablishedJetstream>();
       const supervisor = yield* EventConsumerSupervisor;
 
-      const register = <F extends Struct.Fields, Err, Req>(
-        eventSchemas: EventSchemas<F>[],
-        handler: (e: EventSchemas<F>[][number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const register = <F extends EventSchemas<any>[], Err, Req>(
+        eventSchemas: F,
+        handler: (e: F[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
         config: { $durableName: string }
       ) => {
         const allSchemas = Schema.Union(...eventSchemas.map(get('schema')));
@@ -149,7 +149,7 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
                     : // could make this exponential
                       Effect.sync(() => m.nak(m.info.redeliveryCount * 1000))
               })
-          ).pipe(Effect.ignoreLogged);
+          ).pipe(Effect.ignoreLogged) as Effect.Effect<void, never, never>;
 
         return supervisor.track(stream, processMessage);
       };
