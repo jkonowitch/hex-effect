@@ -13,13 +13,14 @@
   },
   "type": "module",
   "peerDependencies": {
-    "@libsql/client": "~0.14.0",
     "effect": ">=3.9",
     "@effect/sql": ">=0.16.1",
-    "@effect/sql-libsql": ">=0.4.1"
+    "@effect/sql-libsql": ">=0.4.1",
+    "@effect/schema": ">=0.75.0"
   },
   "dependencies": {
     "@hex-effect/core": "workspace:*",
+    "@libsql/client": "~0.14.0",
     "@opentelemetry/semantic-conventions": "^1.27.0",
     "nanoid": "^5.0.7",
     "@nats-io/transport-node": "^3.0.0-12",

@@ -14,7 +14,8 @@
     "nanoid": "~5.0.7"
   },
   "peerDependencies": {
-    "effect": ">=3.9"
+    "effect": ">=3.9",
+    "@effect/schema": ">=0.75.0"
   },
   "exports": {
     "node": {

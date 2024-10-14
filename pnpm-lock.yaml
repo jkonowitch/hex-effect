@@ -229,6 +229,9 @@ importers:
 
   packages/@hex-effect/core:
     dependencies:
+      '@effect/schema':
+        specifier: '>=0.75.0'
+        version: 0.75.2(effect@3.9.1)
       effect:
         specifier: '>=3.9'
         version: 3.9.1
@@ -245,6 +248,9 @@ importers:
 
   packages/@hex-effect/infra-kysely-libsql-nats:
     dependencies:
+      '@effect/schema':
+        specifier: '>=0.75.0'
+        version: 0.75.2(effect@3.9.1)
       '@effect/sql':
         specifier: '>=0.16.1'
         version: 0.16.1(@effect/experimental@0.29.1(@effect/platform@0.68.1(@effect/schema@0.75.2(effect@3.9.1))(effect@3.9.1))(@effect/schema@0.75.2(effect@3.9.1))(effect@3.9.1)(ws@8.18.0))(@effect/platform@0.68.1(@effect/schema@0.75.2(effect@3.9.1))(effect@3.9.1))(@effect/schema@0.75.2(effect@3.9.1))(effect@3.9.1)
