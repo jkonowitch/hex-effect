@@ -10,7 +10,7 @@ import {
 import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from 'effect';
 import { LibsqlSdk } from '../sql.js';
 import { Live } from '../index.js';
-import { EventConsumer, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
+import { EventConsumer, IsolationLevel, withTXBoundary } from '@hex-effect/core';
 
 const IntegrationLive = Live.pipe(
   Layer.provideMerge(LibsqlSdk.Default),
@@ -38,7 +38,7 @@ describe('Integration Test', () => {
       yield* register([PersonCreatedEvent], (e) => Deferred.succeed(deferred, e), {
         $durableName: 'test-consumer'
       });
-      const [event] = yield* addPerson('Jeff').pipe(withNextTXBoundary(IsolationLevel.Batched));
+      const [event] = yield* addPerson('Jeff').pipe(withTXBoundary(IsolationLevel.Batched));
 
       // ensure entity was persisted
       const GetById = yield* GetByIdResolver;

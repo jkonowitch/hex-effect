@@ -103,7 +103,7 @@ export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   ) => Effect.Effect<A[], E | TransactionError, R>
 >() {}
 
-export function withNextTXBoundary(level: IsolationLevel) {
+export function withTXBoundary(level: IsolationLevel) {
   return <E, R, A extends EncodableEventBase>(
     useCase: Effect.Effect<A[], E, R>
   ): Effect.Effect<A[], E | TransactionError, WithTransaction | R> =>

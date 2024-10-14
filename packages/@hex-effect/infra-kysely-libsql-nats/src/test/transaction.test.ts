@@ -2,7 +2,7 @@ import { SqlClient } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
 import { Effect, Layer, identity, Stream, Fiber, Struct, Array } from 'effect';
 import { Schema } from '@effect/schema';
-import { IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
+import { IsolationLevel, withTXBoundary } from '@hex-effect/core';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
 import { LibsqlSdk } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
@@ -30,7 +30,7 @@ describe('WithTransaction', () => {
         const sql = yield* SqlClient.SqlClient;
         yield* addPerson('Jeffrey ').pipe(
           Effect.andThen(Effect.fail('boom')),
-          withNextTXBoundary(IsolationLevel.Serializable),
+          withTXBoundary(IsolationLevel.Serializable),
           Effect.ignore
         );
         const res = yield* sql<{
@@ -48,7 +48,7 @@ describe('WithTransaction', () => {
         const sql = yield* SqlClient.SqlClient;
         yield* addPerson('Jeffrey ').pipe(
           Effect.andThen(Effect.fail('boom')),
-          withNextTXBoundary(IsolationLevel.Batched),
+          withTXBoundary(IsolationLevel.Batched),
           Effect.ignore
         );
         const res = yield* sql<{
@@ -64,7 +64,7 @@ describe('WithTransaction', () => {
       Effect.gen(function* () {
         const count = yield* countCommits;
         const sql = yield* SqlClient.SqlClient;
-        const [event] = yield* addPerson('Kralf').pipe(withNextTXBoundary(IsolationLevel.Batched));
+        const [event] = yield* addPerson('Kralf').pipe(withTXBoundary(IsolationLevel.Batched));
         const res = yield* sql<{
           name: string;
         }>`select * from people;`;
@@ -82,9 +82,7 @@ describe('WithTransaction', () => {
       Effect.gen(function* () {
         const count = yield* countCommits;
         const sql = yield* SqlClient.SqlClient;
-        const [event] = yield* addPerson('Kralf').pipe(
-          withNextTXBoundary(IsolationLevel.Serializable)
-        );
+        const [event] = yield* addPerson('Kralf').pipe(withTXBoundary(IsolationLevel.Serializable));
         const res = yield* sql<{
           name: string;
         }>`select * from people;`;
