@@ -95,16 +95,16 @@ export class TransactionError extends Data.TaggedError('@hex-effect/TransactionE
 
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
-  <E, R, A extends Encodable<any>>(
-    eff: Effect.Effect<A[], E, R>,
+  <E, R, F extends Struct.Fields>(
+    eff: Effect.Effect<Encodable<F>[], E, R>,
     isolationLevel: IsolationLevel
-  ) => Effect.Effect<A[], E | TransactionError, R>
+  ) => Effect.Effect<Encodable<F>[], E | TransactionError, R>
 >() {}
 
 export function withNextTXBoundary(level: IsolationLevel) {
-  return <E, R, A extends Encodable<any>>(
-    useCase: Effect.Effect<A[], E, R>
-  ): Effect.Effect<A[], E | TransactionError, WithTransaction | R> =>
+  return <E, R, F extends Struct.Fields>(
+    useCase: Effect.Effect<Encodable<F>[], E, R>
+  ): Effect.Effect<Encodable<F>[], E | TransactionError, WithTransaction | R> =>
     Effect.gen(function* () {
       const withTx = yield* WithTransaction;
       const events = yield* withTx(useCase, level);

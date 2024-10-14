@@ -27,11 +27,12 @@ import {
   type JsMsg
 } from '@nats-io/jetstream';
 import { Schema } from '@effect/schema';
-import { EventBaseSchema, EventConsumer } from '@hex-effect/core';
+import { EventBaseSchema, type EventSchemas } from '@hex-effect/core';
 import { UnknownException } from 'effect/Cause';
 import { get } from 'effect/Struct';
 import { constTrue, constVoid, pipe } from 'effect/Function';
 import type { UnpublishedEventRecord } from './event-store.js';
+import type { Struct } from '@effect/schema/Schema';
 
 class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
   '@hex-effect/EstablishedJetstream',
@@ -110,9 +111,13 @@ export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
       const ctx = yield* Effect.context<EstablishedJetstream>();
       const supervisor = yield* EventConsumerSupervisor;
 
-      const register: (typeof EventConsumer.Service)['register'] = (schema, handler, config) => {
-        const allSchemas = Schema.Union(...schema.map(get('schema'))) as typeof EventBaseSchema;
-        const subjects = schema.map((s) =>
+      const register = <F extends Struct.Fields, Err, Req>(
+        eventSchemas: EventSchemas<F>[],
+        handler: (e: EventSchemas<F>[][number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
+        config: { $durableName: string }
+      ) => {
+        const allSchemas = Schema.Union(...eventSchemas.map(get('schema')));
+        const subjects = eventSchemas.map((s) =>
           Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
         );
 

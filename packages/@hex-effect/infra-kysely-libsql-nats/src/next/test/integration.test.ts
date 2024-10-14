@@ -7,7 +7,7 @@ import {
   NatsContainer,
   PersonCreatedEvent
 } from './util.js';
-import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option, Struct } from 'effect';
+import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from 'effect';
 import { LibsqlSdk } from '../sql.js';
 import { Live } from '../index.js';
 import { EventConsumer, IsolationLevel, withNextTXBoundary } from '@hex-effect/core';
