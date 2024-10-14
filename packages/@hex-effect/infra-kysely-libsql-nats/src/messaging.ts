@@ -1,139 +1,175 @@
-import { Schema } from '@effect/schema';
-import { EventHandlerService } from '@hex-effect/core';
-import { Data, Effect, Either, Equal, Layer, PubSub, Queue, Stream } from 'effect';
-import { UnknownException } from 'effect/Cause';
-import { constTrue } from 'effect/Function';
-import type { ConsumerInfo, ConsumerUpdateConfig } from 'nats';
-import { NatsError as RawNatsError, ErrorCode, AckPolicy } from 'nats';
 import {
-  EventStore,
-  NatsService,
-  TransactionEvents,
-  type INatsService,
-  type StoredEvent
-} from './service-definitions.js';
+  Config,
+  Context,
+  Data,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Scope,
+  Stream,
+  Supervisor
+} from 'effect';
+import {
+  connect,
+  type ConnectionOptions,
+  ErrorCode,
+  type NatsConnection,
+  NatsError as RawNatsError
+} from '@nats-io/transport-node';
+import {
+  AckPolicy,
+  jetstream,
+  jetstreamManager,
+  RetentionPolicy,
+  type ConsumerInfo,
+  type ConsumerUpdateConfig,
+  type JsMsg
+} from '@nats-io/jetstream';
+import { Schema } from '@effect/schema';
+import { EventBaseSchema, type EventSchemas } from '@hex-effect/core';
+import { UnknownException } from 'effect/Cause';
+import { get } from 'effect/Struct';
+import { constTrue, constVoid, pipe } from 'effect/Function';
+import type { UnpublishedEventRecord } from './event-store.js';
 
-class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
-  static isNatsError(e: unknown): e is RawNatsError {
-    return e instanceof RawNatsError;
-  }
-}
-
-export const EventPublishingDaemon = Layer.scopedDiscard(
-  Effect.gen(function* () {
-    const pub = yield* TransactionEvents;
-    const dequeue = yield* PubSub.subscribe(pub);
-    yield* Queue.take(dequeue)
-      .pipe(
-        Effect.map(Equal.equals('commit')),
-        Effect.if({
-          onTrue: () => publishingPipeline,
-          onFalse: () => Effect.void
-        }),
-        Effect.forever
-      )
-      .pipe(Effect.forkScoped);
-  })
-);
-
-const callNats = <T>(operation: Promise<T>) =>
-  Effect.tryPromise({
-    try: () => operation,
-    catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
-  }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
-
-const publishingPipeline = Effect.zip(EventStore, NatsService).pipe(
-  Effect.flatMap(([eventStore, natsService]) => {
-    const publishEvent = (event: StoredEvent) =>
-      callNats(
-        natsService.jetstream.publish(natsService.eventToSubject(event).asSubject, event.payload, {
-          msgID: event.id,
-          timeout: 1000
+class EstablishedJetstream extends Effect.Service<EstablishedJetstream>()(
+  '@hex-effect/EstablishedJetstream',
+  {
+    accessors: true,
+    effect: Effect.gen(function* () {
+      const applicationNamespace = yield* Config.string('APPLICATION_NAMESPACE');
+      const conn = yield* NatsClient;
+      const jsm = yield* Effect.promise(() => jetstreamManager(conn));
+      const streamInfo = yield* callNats(
+        jsm.streams.add({
+          name: applicationNamespace,
+          subjects: [`${applicationNamespace}.>`],
+          retention: RetentionPolicy.Interest
         })
       );
+      return {
+        streamInfo,
+        jsm,
+        js: jetstream(conn),
+        applicationNamespace,
+        asSubject(e: typeof EventMetadata.Type): string {
+          return `${applicationNamespace}.${e._context}.${e._tag}`;
+        }
+      } as const;
+    })
+  }
+) {}
 
-    return eventStore
-      .getUnpublished()
-      .pipe(
-        Effect.andThen((events) =>
-          Effect.zip(
-            Effect.forEach(events, publishEvent),
-            eventStore.markPublished(events.map((e) => e.id))
-          )
-        )
-      );
-  })
-);
-
-export const EventHandlerServiceLive = Layer.effect(
-  EventHandlerService,
-  Effect.gen(function* () {
-    const natsService = yield* NatsService;
+export class PublishEvent extends Effect.Service<PublishEvent>()('@hex-effect/PublishEvent', {
+  accessors: true,
+  effect: Effect.gen(function* () {
+    const { asSubject, js } = yield* EstablishedJetstream;
 
     return {
-      register(eventSchema, triggers, handler, config) {
-        return Effect.gen(function* () {
-          const consumerInfo = yield* upsertConsumer(natsService, config.$durableName, triggers);
-          yield* streamEventsToHandler(consumerInfo, natsService, (payload: string) =>
-            Effect.gen(function* () {
-              const decoded = yield* Schema.decodeUnknown(Schema.parseJson(eventSchema))(payload);
-              yield* handler(decoded).pipe(Effect.annotateLogs('msgId', decoded.messageId));
-            })
+      publish: (e: typeof UnpublishedEventRecord.Type) =>
+        callNats(js.publish(asSubject(e), e.payload, { msgID: e.messageId, timeout: 1000 }))
+    };
+  }),
+  dependencies: [EstablishedJetstream.Default]
+}) {}
+
+const EventMetadata = EventBaseSchema.pick('_context', '_tag');
+
+class EventConsumerSupervisor extends Effect.Service<EventConsumerSupervisor>()(
+  'EventConsumerSupervisor',
+  {
+    scoped: Effect.gen(function* () {
+      const supervisor = yield* Supervisor.track;
+      const scope = yield* Effect.scope;
+
+      const track = <A, R, S extends Stream.Stream<A, Error, never>>(
+        createStream: Effect.Effect<S, never, Scope.Scope>,
+        processStream: (v: A) => Effect.Effect<void, never, R>
+      ) =>
+        Effect.gen(function* () {
+          const stream = yield* createStream.pipe(Scope.extend(scope));
+          yield* Stream.runForEach(stream, processStream).pipe(
+            Effect.supervised(supervisor),
+            Effect.fork
           );
         });
-      }
-    };
-  })
-);
 
-const streamEventsToHandler = <A, E, R>(
-  consumerInfo: ConsumerInfo,
-  natsService: INatsService,
-  handler: (payload: string) => Effect.Effect<A, E, R>
-) =>
-  Effect.gen(function* () {
-    const consumer = yield* callNats(
-      natsService.jetstream.consumers.get(natsService.streamInfo.config.name, consumerInfo.name)
-    );
+      yield* Effect.addFinalizer(() => supervisor.value.pipe(Effect.flatMap(Fiber.interruptAll)));
 
-    const asynIter = yield* callNats(consumer.consume());
-    const stream = Stream.fromAsyncIterable(asynIter, (e) => new Error(`${e}`));
+      return { track };
+    })
+  }
+) {}
 
-    yield* Effect.addFinalizer(() =>
-      Effect.zipRight(
-        Effect.logDebug(`closing stream ${consumerInfo.name}`),
-        callNats(asynIter.close()).pipe(Effect.ignoreLogged)
-      )
-    );
+export class NatsEventConsumer extends Effect.Service<NatsEventConsumer>()(
+  '@hex-effect/NatsEventConsumer',
+  {
+    accessors: true,
+    effect: Effect.gen(function* () {
+      const ctx = yield* Effect.context<EstablishedJetstream>();
+      const supervisor = yield* EventConsumerSupervisor;
 
-    yield* Stream.runForEach(stream, (msg) =>
-      Effect.gen(function* () {
-        const res = yield* handler(msg.data.toString()).pipe(Effect.either);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const register = <F extends EventSchemas<any>[], Err, Req>(
+        eventSchemas: F,
+        handler: (e: F[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
+        config: { $durableName: string }
+      ) => {
+        const allSchemas = Schema.Union(...eventSchemas.map(get('schema')));
+        const subjects = eventSchemas.map((s) =>
+          Context.get(ctx, EstablishedJetstream).asSubject(s.metadata)
+        );
 
-        yield* Either.match(res, {
-          onLeft: (e) => {
-            msg.term();
-            return Effect.logError(`Message processing failed with: `, e);
-          },
-          onRight: () => callNats(msg.ackAck())
-        });
-      })
-    );
-  }).pipe(Effect.catchAll(Effect.logError), Effect.scoped);
+        const stream = pipe(
+          upsertConsumer({
+            $durableName: config.$durableName,
+            subjects
+          }),
+          Effect.flatMap(createStream),
+          Effect.provide(ctx),
+          Effect.orDie
+        );
 
-const upsertConsumer = (
-  natsService: INatsService,
-  $durableName: string,
-  triggers: { context: string; tag: string }[]
-) =>
+        const processMessage = (msg: JsMsg) =>
+          Effect.acquireUseRelease(
+            Effect.succeed(msg),
+            (a) =>
+              pipe(
+                Schema.decodeUnknown(Schema.parseJson(allSchemas))(a.string()),
+                Effect.flatMap(handler)
+              ),
+            (m, exit) =>
+              Exit.match(exit, {
+                onSuccess: () => Effect.promise(() => m.ackAck()).pipe(Effect.map(constVoid)),
+                onFailure: (c) =>
+                  // `nak` (e.g. retry) if it died or was interrupted, etc.
+                  c._tag === 'Fail'
+                    ? Effect.sync(() => m.term())
+                    : // could make this exponential
+                      Effect.sync(() => m.nak(m.info.redeliveryCount * 1000))
+              })
+          ).pipe(Effect.ignoreLogged) as Effect.Effect<void, never, never>;
+
+        return supervisor.track(stream, processMessage);
+      };
+      return { register };
+    }),
+    dependencies: [EstablishedJetstream.Default, EventConsumerSupervisor.Default]
+  }
+) {}
+
+const upsertConsumer = (params: { $durableName: string; subjects: string[] }) =>
   Effect.gen(function* () {
     const config: ConsumerUpdateConfig = {
       max_deliver: 3,
-      filter_subjects: triggers.map((t) => natsService.eventToSubject(t).asSubject)
+      filter_subjects: params.subjects
     };
 
+    const stream = yield* EstablishedJetstream;
+
     const consumerExists = yield* callNats(
-      natsService.jetstreamManager.consumers.info(natsService.streamInfo.config.name, $durableName)
+      stream.jsm.consumers.info(stream.streamInfo.config.name, params.$durableName)
     ).pipe(
       Effect.map(constTrue),
       Effect.catchIf(
@@ -144,20 +180,63 @@ const upsertConsumer = (
 
     if (consumerExists) {
       return yield* callNats(
-        natsService.jetstreamManager.consumers.update(
-          natsService.streamInfo.config.name,
-          $durableName,
-          config
-        )
+        stream.jsm.consumers.update(stream.streamInfo.config.name, params.$durableName, config)
       );
     } else {
       return yield* callNats(
-        natsService.jetstreamManager.consumers.add(natsService.streamInfo.config.name, {
+        stream.jsm.consumers.add(stream.streamInfo.config.name, {
           ...config,
           ack_policy: AckPolicy.Explicit,
-          durable_name: $durableName
+          durable_name: params.$durableName
         })
       );
     }
     // the only allowable error is handled above
-  }).pipe(Effect.orDie, Effect.tap(Effect.logDebug(`Added handler for ${$durableName}`)));
+  }).pipe(Effect.orDie, Effect.tap(Effect.logDebug(`Added handler for ${params.$durableName}`)));
+
+const createStream = (consumerInfo: ConsumerInfo) =>
+  Effect.gen(function* () {
+    const eJS = yield* EstablishedJetstream;
+
+    const consumer = yield* Effect.acquireRelease(
+      callNats(eJS.js.consumers.get(eJS.streamInfo.config.name, consumerInfo.name)).pipe(
+        Effect.flatMap((c) => callNats(c.consume()))
+      ),
+      (consumer) => callNats(consumer.close()).pipe(Effect.orDie)
+    );
+
+    return Stream.fromAsyncIterable(consumer, (e) => new Error(`${e}`));
+  });
+
+export class NatsClient extends Context.Tag('@hex-effect/nats-client')<
+  NatsClient,
+  NatsConnection
+>() {
+  public static layer = (config: Config.Config.Wrap<ConnectionOptions>) =>
+    Layer.scoped(
+      this,
+      Config.unwrap(config).pipe(
+        Effect.flatMap((opts) =>
+          Effect.acquireRelease(
+            Effect.promise(() => connect(opts)),
+            (conn) => Effect.promise(() => conn.drain())
+          )
+        )
+      )
+    );
+}
+
+export class NatsError extends Data.TaggedError('NatsError')<{ raw: RawNatsError }> {
+  static isNatsError(e: unknown): e is RawNatsError {
+    return e instanceof RawNatsError;
+  }
+  get message() {
+    return `${this.raw.message}\n${this.raw.stack}`;
+  }
+}
+
+const callNats = <T>(operation: Promise<T>) =>
+  Effect.tryPromise({
+    try: () => operation,
+    catch: (e) => (NatsError.isNatsError(e) ? new NatsError({ raw: e }) : new UnknownException(e))
+  }).pipe(Effect.catchTag('UnknownException', (e) => Effect.die(e)));
