@@ -1,16 +1,18 @@
 import { Effect } from 'effect';
 import { UUIDGenerator } from '@hex-effect/core';
-import { Task, TaskAddedEvent, TaskCompletedEvent, TaskId } from './model.js';
+import { Task, TaskAddedEvent, TaskCompletedEvent } from './model.js';
 import type { Project } from '../project/model.js';
-
-const makeWithUUID = (args: Omit<Parameters<(typeof Task)['make']>[0], 'id'>) =>
-  UUIDGenerator.generate().pipe(
-    Effect.map((uuid) => Task.make({ ...args, id: TaskId.make(uuid) }))
-  );
+import { Schema } from '@effect/schema';
 
 export const addTaskToProject = (project: typeof Project.Type, description: string) =>
   Effect.gen(function* () {
-    const task = yield* makeWithUUID({ description, projectId: project.id });
+    const uuid = yield* UUIDGenerator.generate();
+    const task = yield* Schema.decode(Task)({
+      projectId: project.id,
+      id: uuid,
+      description,
+      completed: false
+    });
     return [task, yield* TaskAddedEvent.make({ taskId: task.id, projectId: project.id })] as const;
   });
 
