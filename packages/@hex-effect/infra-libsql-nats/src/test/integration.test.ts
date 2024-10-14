@@ -10,9 +10,10 @@ import {
 import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from 'effect';
 import { LibsqlSdk } from '../sql.js';
 import { Live } from '../index.js';
-import { EventConsumer, IsolationLevel, withTXBoundary } from '@hex-effect/core';
+import { EventConsumer, IsolationLevel, UUIDGenerator, withTXBoundary } from '@hex-effect/core';
 
 const IntegrationLive = Live.pipe(
+  Layer.provideMerge(UUIDGenerator.Default),
   Layer.provideMerge(LibsqlSdk.Default),
   Layer.provide(Layer.merge(LibsqlContainer.ConfigLive, NatsContainer.ClientLive)),
   Layer.provide(

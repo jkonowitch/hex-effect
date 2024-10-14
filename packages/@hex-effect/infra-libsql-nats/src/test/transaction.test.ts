@@ -2,7 +2,7 @@ import { SqlClient } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
 import { Effect, Layer, identity, Stream, Fiber, Struct, Array } from 'effect';
 import { Schema } from '@effect/schema';
-import { IsolationLevel, withTXBoundary } from '@hex-effect/core';
+import { IsolationLevel, UUIDGenerator, withTXBoundary } from '@hex-effect/core';
 import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
 import { LibsqlSdk } from '../sql.js';
 import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
@@ -15,7 +15,8 @@ const TestLive = Migrations.pipe(
   Layer.provideMerge(SaveEvents.Default),
   Layer.provideMerge(MarkAsPublished.Default),
   Layer.provideMerge(WithTransactionLive),
-  Layer.provideMerge(LibsqlSdk.Default)
+  Layer.provideMerge(LibsqlSdk.Default),
+  Layer.provideMerge(UUIDGenerator.Default)
 );
 
 describe('WithTransaction', () => {
@@ -103,7 +104,7 @@ describe('WithTransaction', () => {
 
     it.effect('marks as published', () =>
       Effect.gen(function* () {
-        const event = PersonCreatedEvent.make({ id: PersonId.make('123') });
+        const event = yield* PersonCreatedEvent.make({ id: PersonId.make('123') });
         yield* SaveEvents.use((service) => service.save([event]));
         expect(yield* unpublishedMessageIds).toContain(event.messageId);
         yield* MarkAsPublished.markAsPublished([event.messageId]);

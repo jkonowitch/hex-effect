@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, layer } from '@effect/vitest';
+import { describe, expect, layer } from '@effect/vitest';
 import { Effect, Config, Layer, Stream, Fiber, Chunk, ConfigProvider, Deferred } from 'effect';
-import { makeDomainEvent } from '@hex-effect/core';
+import { makeDomainEvent, UUIDGenerator } from '@hex-effect/core';
 import { Schema } from '@effect/schema';
 import { NatsClient, NatsEventConsumer, PublishEvent } from '../messaging.js';
 import { UnpublishedEventRecord } from '../event-store.js';
@@ -12,6 +12,7 @@ const SomeEvent = makeDomainEvent(
 );
 
 const TestLive = PublishEvent.Default.pipe(
+  Layer.provideMerge(UUIDGenerator.Default),
   Layer.provideMerge(NatsContainer.ClientLive),
   Layer.provide(
     Layer.setConfigProvider(ConfigProvider.fromMap(new Map([['APPLICATION_NAMESPACE', 'kralf']])))
@@ -20,9 +21,7 @@ const TestLive = PublishEvent.Default.pipe(
 
 describe('Messaging', () => {
   layer(TestLive)((it) => {
-    let event: ReturnType<(typeof SomeEvent)['make']>;
-
-    const publish = (e: typeof event) =>
+    const publish = (e: Effect.Effect.Success<ReturnType<(typeof SomeEvent)['make']>>) =>
       PublishEvent.publish(
         UnpublishedEventRecord.make({
           ...e,
@@ -30,12 +29,9 @@ describe('Messaging', () => {
         })
       );
 
-    beforeEach(() => {
-      event = SomeEvent.make({ name: 'Jeff' });
-    });
-
     it.scoped('it can publish', () =>
       Effect.gen(function* () {
+        const event = yield* SomeEvent.make({ name: 'Jeff' });
         const conn = yield* NatsClient;
         const sub = yield* Effect.acquireRelease(
           Config.string('APPLICATION_NAMESPACE').pipe(
@@ -62,6 +58,7 @@ describe('Messaging', () => {
 
     it.effect('EventConsumer', () =>
       Effect.gen(function* () {
+        const event = yield* SomeEvent.make({ name: 'Jeff' });
         const deferred = yield* Deferred.make<typeof SomeEvent.schema.Type>();
         yield* NatsEventConsumer.use((c) =>
           c.register([SomeEvent], (e) => Deferred.succeed(deferred, e), { $durableName: 'shmee' })
@@ -88,6 +85,7 @@ describe('Messaging', () => {
             { $durableName: 'shmee' }
           )
         );
+        const event = yield* SomeEvent.make({ name: 'Jeff' });
         yield* publish(event);
         const received = yield* Deferred.await(deferred);
         expect(event).toMatchObject(received);

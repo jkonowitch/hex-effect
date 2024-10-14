@@ -139,7 +139,7 @@ export const addPerson = (name: string) =>
     });
     const save = yield* SavePerson;
     yield* save(person);
-    return [PersonCreatedEvent.make({ id: person.id })];
+    return [yield* PersonCreatedEvent.make({ id: person.id })] as const;
   }).pipe(Effect.provide(SavePerson.live));
 
 export const GetByIdResolver = Effect.gen(function* () {

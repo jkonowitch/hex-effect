@@ -30,7 +30,7 @@ export const WithTransactionLive = Layer.effect(
     const { save } = yield* SaveEvents;
     const pub = yield* UseCaseCommit;
     return <E, R, A extends EncodableEventBase>(
-      useCase: Effect.Effect<A[], E, R>,
+      useCase: Effect.Effect<ReadonlyArray<A>, E, R>,
       isolationLevel: IsolationLevel
     ) => {
       const useCaseWithEventStorage = useCase.pipe(
@@ -38,7 +38,7 @@ export const WithTransactionLive = Layer.effect(
         Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
       );
 
-      let program: Effect.Effect<A[], E | TransactionError, R>;
+      let program: Effect.Effect<ReadonlyArray<A>, E | TransactionError, R>;
 
       if (isolationLevel === IsolationLevel.Batched) {
         program = Effect.gen(function* () {

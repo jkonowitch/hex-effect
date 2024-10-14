@@ -30,7 +30,7 @@ export class SaveEvents extends Effect.Service<SaveEvents>()('SaveEvents', {
     const sql = yield* SqlClient.SqlClient;
     const write = yield* WriteStatement;
 
-    const save = <A extends EncodableEventBase>(events: A[]) =>
+    const save = <A extends EncodableEventBase>(events: ReadonlyArray<A>) =>
       Effect.forEach(
         events,
         (e) =>
