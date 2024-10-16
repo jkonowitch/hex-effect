@@ -3,6 +3,7 @@ import { type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { createClient, type Config as LibsqlClientConfig } from '@libsql/client';
 import { LibsqlClient } from '@effect/sql-libsql';
+import { InfrastructureError } from '@hex-effect/core';
 
 class _WriteExecutor extends Context.Tag('@hex-effect/_WriteExecutor')<
   _WriteExecutor,
@@ -40,13 +41,15 @@ export const LibsqlClientLive = Layer.unwrapEffect(
 
 export class WriteStatement extends Context.Tag('WriteStatement')<
   WriteStatement,
-  (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
+  (stm: Statement.Statement<unknown>) => Effect.Effect<void, InfrastructureError>
 >() {
   public static live = Layer.succeed(WriteStatement, (stm) =>
-    Effect.serviceOption(_WriteExecutor).pipe(
-      Effect.map((_) => (_._tag === 'None' ? identity : _.value)),
-      Effect.andThen((wr) => wr(stm))
-    )
+    Effect.serviceOption(_WriteExecutor)
+      .pipe(
+        Effect.map((_) => (_._tag === 'None' ? identity : _.value)),
+        Effect.andThen((wr) => wr(stm))
+      )
+      .pipe(Effect.mapError((e) => new InfrastructureError({ cause: e })))
   );
 
   public static withExecutor = <A, E, R>(

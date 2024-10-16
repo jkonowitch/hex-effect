@@ -109,18 +109,26 @@ export class TransactionError extends Data.TaggedError('@hex-effect/TransactionE
   cause: unknown;
 }> {}
 
+export class InfrastructureError extends Data.TaggedError('@hex-effect/InfrastructureError')<{
+  cause: unknown;
+}> {}
+
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
   <E, R, A extends EncodableEventBase>(
     eff: Effect.Effect<ReadonlyArray<A>, E, R>,
     isolationLevel: IsolationLevel
-  ) => Effect.Effect<ReadonlyArray<A>, E | TransactionError, R>
+  ) => Effect.Effect<ReadonlyArray<A>, E | TransactionError | InfrastructureError, R>
 >() {}
 
 export function withTXBoundary(level: IsolationLevel) {
   return <E, R, A extends EncodableEventBase>(
     useCase: Effect.Effect<ReadonlyArray<A>, E, R>
-  ): Effect.Effect<ReadonlyArray<A>, E | TransactionError, WithTransaction | R> =>
+  ): Effect.Effect<
+    ReadonlyArray<A>,
+    E | TransactionError | InfrastructureError,
+    WithTransaction | R
+  > =>
     Effect.gen(function* () {
       const withTx = yield* WithTransaction;
       const events = yield* withTx(useCase, level);

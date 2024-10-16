@@ -1,4 +1,5 @@
 import {
+  InfrastructureError,
   IsolationLevel,
   TransactionError,
   WithTransaction,
@@ -38,7 +39,7 @@ export const WithTransactionLive = Layer.effect(
         Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
       );
 
-      let program: Effect.Effect<ReadonlyArray<A>, E | TransactionError, R>;
+      let program: Effect.Effect<ReadonlyArray<A>, E | TransactionError | InfrastructureError, R>;
 
       if (isolationLevel === IsolationLevel.Batched) {
         program = Effect.gen(function* () {
