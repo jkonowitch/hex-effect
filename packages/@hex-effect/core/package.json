@@ -1,6 +1,6 @@
 {
   "name": "@hex-effect/core",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "scripts": {
     "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
     "check": "tsc --noEmit"
@@ -14,8 +14,8 @@
     "nanoid": "~5.0.7"
   },
   "peerDependencies": {
-    "@effect/schema": ">=0.68",
-    "effect": ">=3.4"
+    "effect": ">=3.9",
+    "@effect/schema": ">=0.75.0"
   },
   "exports": {
     "node": {

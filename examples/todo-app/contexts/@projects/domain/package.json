@@ -3,11 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "echo 'Add dev script here'",
-    "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
-    "test": "echo 'Add test script here'",
-    "lint": "echo 'Add lint script here'",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -23,7 +20,7 @@
       "default": "./dist/index.js"
     },
     "default": {
-      "default": "./index.ts"
+      "default": "./src/index.ts"
     }
   }
 }

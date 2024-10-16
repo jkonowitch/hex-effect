@@ -1,56 +1,102 @@
 import { Schema } from '@effect/schema';
-import type { symbol } from '@effect/schema/Serializable';
-import { Context, Effect, Fiber, Layer, PubSub, Scope } from 'effect';
+import { Serializable } from '@effect/schema';
+import type { Struct } from '@effect/schema/Schema';
+import { Clock, Context, Data, Effect } from 'effect';
+import { isObject } from 'effect/Predicate';
 import { nanoid } from 'nanoid';
 
-/**
- * All events must extend from this base, and are expected to have a `_tag` as well (see `EventBaseType`)
- */
 export const EventBaseSchema = Schema.Struct({
   _context: Schema.String,
-  occurredOn: Schema.Date.pipe(
-    Schema.propertySignature,
-    Schema.withConstructorDefault(() => new Date())
-  ),
-  messageId: Schema.String.pipe(
-    Schema.propertySignature,
-    Schema.withConstructorDefault(() => nanoid())
-  )
+  _tag: Schema.String,
+  occurredOn: Schema.Date,
+  messageId: Schema.String
 });
 
-type EventBaseType = typeof EventBaseSchema.Type & { _tag: string } & {
+type DomainEventTag = { __type: 'DomainEvent' };
+
+export type EncodableEventBase = typeof EventBaseSchema.Type & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly [symbol]: Schema.Schema<any, any, never>;
+  readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
+} & DomainEventTag;
+
+export type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
+  readonly [Serializable.symbol]: Schema.Struct<F>;
+} & DomainEventTag;
+
+export type EventSchemas<F extends Struct.Fields> = {
+  schema: Schema.Struct<F>;
+  metadata: Pick<typeof EventBaseSchema.Type, '_context' | '_tag'>;
+  _tag: 'EventSchema';
+  make: (
+    args: Omit<Parameters<Schema.Struct<F>['make']>[0], 'messageId' | 'occurredOn'>
+  ) => Effect.Effect<Readonly<Encodable<F>>, never, UUIDGenerator>;
 };
 
 /**
- * Abstract service, defined in the `domain` layer, that allows publishing of arbitrary domain events
+ * Builder for Domain Events
  */
-export class DomainEventPublisher extends Context.Tag('DomainEventPublisher')<
-  DomainEventPublisher,
-  PubSub.PubSub<EventBaseType>
->() {
-  public static live = Layer.effect(DomainEventPublisher, PubSub.bounded<EventBaseType>(2));
-}
+export const makeDomainEvent = <T extends string, C extends string, F extends Schema.Struct.Fields>(
+  metadata: { _tag: T; _context: C },
+  fields: F
+) => {
+  const schema = Schema.TaggedStruct(metadata._tag, {
+    ...EventBaseSchema.omit('_context', '_tag').fields,
+    ...fields,
+    _context: Schema.Literal(metadata._context).pipe(
+      Schema.propertySignature,
+      Schema.withConstructorDefault(() => metadata._context)
+    )
+  });
+
+  const domainEvent: EventSchemas<typeof schema.fields> = {
+    schema,
+    make: (args) =>
+      Effect.gen(function* () {
+        const uuid = yield* UUIDGenerator.generate();
+        const date = new Date(yield* Clock.currentTimeMillis);
+        return {
+          ...schema.make({
+            ...(args as Parameters<typeof schema.make>[0]),
+            messageId: uuid,
+            occurredOn: date
+          }),
+          get [Serializable.symbol]() {
+            return schema;
+          },
+          __type: 'DomainEvent'
+        } as const;
+      }),
+    metadata,
+    _tag: 'EventSchema'
+  } as const;
+
+  return domainEvent;
+};
 
 /**
  * Service which allows an `application` to connect a Domain Event with a handler
  * This is a linchpin service that enables an event-driven architecture
  */
-export class EventHandlerService extends Context.Tag('EventHandlerService')<
-  EventHandlerService,
+export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
+  EventConsumer,
   {
-    register<Q extends EventBaseType, I, R extends never, Err, Req>(
-      eventSchema: Schema.Schema<Q, I, R>,
-      triggers: {
-        context: Schema.Schema<Q, I, R>['Type']['_context'];
-        tag: Schema.Schema<Q, I, R>['Type']['_tag'];
-      }[],
-      handler: (e: Schema.Schema<Q, I, R>['Type']) => Effect.Effect<void, Err, Req>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    register<S extends EventSchemas<any>[], Err, Req>(
+      eventSchemas: S,
+      handler: (e: S[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
     ): Effect.Effect<void, never, Req>;
   }
 >() {}
+
+export class UUIDGenerator extends Effect.Service<UUIDGenerator>()('@hex-effect/UUIDGenerator', {
+  succeed: {
+    generate() {
+      return nanoid();
+    }
+  } as const,
+  accessors: true
+}) {}
 
 export enum IsolationLevel {
   ReadCommitted = 'ReadCommitted',
@@ -60,48 +106,38 @@ export enum IsolationLevel {
   Batched = 'Batched'
 }
 
-/**
- * Service which controls the opening and closing of a "transaction"
- * Abstracted from a particular infrastructure.
- * Isolation Levels are implemented by an infra-specific adapter
- */
-export type ITransactionalBoundary = {
-  begin(mode: IsolationLevel): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
-  commit(): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
-  rollback(): Effect.Effect<void, never, Scope.Scope | DomainEventPublisher>;
-};
+export class DataIntegrityError extends Data.TaggedError('@hex-effect/DataIntegrityError')<{
+  cause: unknown;
+}> {}
 
-export class TransactionalBoundary extends Context.Tag('TransactionalBoundary')<
-  TransactionalBoundary,
-  ITransactionalBoundary
+export class InfrastructureError extends Data.TaggedError('@hex-effect/InfrastructureError')<{
+  cause: unknown;
+}> {
+  get message() {
+    return `${this.cause}`;
+  }
+}
+
+export type PersistenceError = DataIntegrityError | InfrastructureError;
+
+export const isPersistenceError = (a: unknown): a is PersistenceError =>
+  isObject(a) && (a instanceof DataIntegrityError || a instanceof DataIntegrityError);
+
+export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
+  WithTransaction,
+  <E, R, A extends EncodableEventBase>(
+    eff: Effect.Effect<ReadonlyArray<A>, E, R>,
+    isolationLevel: IsolationLevel
+  ) => Effect.Effect<ReadonlyArray<A>, E | PersistenceError, R>
 >() {}
 
-export class TransactionalBoundaryProvider extends Context.Tag('TransactionalBoundaryProvider')<
-  TransactionalBoundaryProvider,
-  Layer.Layer<TransactionalBoundary | DomainEventPublisher>
->() {}
-
-export function withTransactionalBoundary(level: IsolationLevel) {
-  return <A, E, R>(
-    useCase: Effect.Effect<A, E, R>
-  ): Effect.Effect<
-    A,
-    E,
-    | TransactionalBoundaryProvider
-    | Exclude<Exclude<R, TransactionalBoundary | DomainEventPublisher>, Scope.Scope>
-  > =>
+export function withTXBoundary(level: IsolationLevel) {
+  return <E, R, A extends EncodableEventBase>(
+    useCase: Effect.Effect<ReadonlyArray<A>, E, R>
+  ): Effect.Effect<ReadonlyArray<A>, E | PersistenceError, WithTransaction | R> =>
     Effect.gen(function* () {
-      const boundary = yield* TransactionalBoundaryProvider;
-
-      const fiber = yield* Effect.gen(function* () {
-        const tx = yield* TransactionalBoundary;
-        yield* tx.begin(level);
-        const result = yield* useCase.pipe(Effect.tapError(tx.rollback));
-        yield* tx.commit();
-        return result;
-      }).pipe(Effect.provide(boundary), Effect.scoped, Effect.fork);
-
-      const exit = yield* Fiber.await(fiber);
-      return yield* exit;
+      const withTx = yield* WithTransaction;
+      const events = yield* withTx(useCase, level);
+      return events;
     });
 }
