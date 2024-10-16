@@ -38,8 +38,8 @@ export const GetAllProjectsLive = Layer.effect(
   SqlClient.SqlClient.pipe(
     Effect.map((sql) => ({
       getAll: () =>
-        sql`SELECT * FROM projects`.pipe(
-          Schema.decodeUnknown(Schema.Array(Project.Model.Project)),
+        sql`SELECT * FROM projects;`.pipe(
+          Effect.flatMap(Schema.decodeUnknown(Schema.Array(Project.Model.Project))),
           Effect.mapError((e) => new InfrastructureError({ cause: e }))
         )
     }))
