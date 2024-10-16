@@ -31,7 +31,6 @@
     "@effect/sql": "^0.16.1",
     "@effect/sql-libsql": "^0.4.1",
     "@effect/experimental": "^0.29.1",
-    "effect": "^3.9.1",
-    "exit-hook": "^4.0.0"
+    "effect": "^3.9.1"
   }
 }
