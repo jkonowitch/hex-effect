@@ -2,6 +2,7 @@ import { Project, Task } from '@projects-next/domain';
 import { Effect, Option } from 'effect';
 import { FindProjectById, SaveProject, SaveTask } from './services.js';
 import { IsolationLevel, withTXBoundary } from '@hex-effect/core';
+import { ApplicationError, ErrorKinds, mapErrors } from './error.js';
 
 export const createProject = (title: string) =>
   Effect.gen(function* () {
@@ -16,10 +17,10 @@ export const addTaskToProject = (params: { projectId: string; description: strin
       Project.Model.ProjectId.make(params.projectId)
     );
     if (Option.isNone(project)) {
-      return yield* Effect.fail('Not found');
+      return yield* Effect.fail(new ApplicationError({ kind: ErrorKinds.NotFound }));
     } else {
       const [task, event] = yield* Task.Service.addTaskToProject(project.value, params.description);
       yield* Effect.serviceFunctions(SaveTask).save(task);
       return [event];
     }
-  }).pipe(withTXBoundary(IsolationLevel.Batched));
+  }).pipe(withTXBoundary(IsolationLevel.Batched), mapErrors);

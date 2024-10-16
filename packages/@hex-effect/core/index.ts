@@ -2,6 +2,7 @@ import { Schema } from '@effect/schema';
 import { Serializable } from '@effect/schema';
 import type { Struct } from '@effect/schema/Schema';
 import { Clock, Context, Data, Effect } from 'effect';
+import { isObject } from 'effect/Predicate';
 import { nanoid } from 'nanoid';
 
 export const EventBaseSchema = Schema.Struct({
@@ -114,6 +115,9 @@ export class InfrastructureError extends Data.TaggedError('@hex-effect/Infrastru
 }> {}
 
 export type PersistenceError = DataIntegrityError | InfrastructureError;
+
+export const isPersistenceError = (a: unknown): a is PersistenceError =>
+  isObject(a) && (a instanceof DataIntegrityError || a instanceof DataIntegrityError);
 
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
