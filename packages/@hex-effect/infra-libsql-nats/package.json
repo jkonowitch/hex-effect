@@ -15,7 +15,7 @@
     "bin/"
   ],
   "bin": {
-    "geni": "./bin/geni"
+    "geni": "./bin/geni-linux-amd64"
   },
   "type": "module",
   "peerDependencies": {
