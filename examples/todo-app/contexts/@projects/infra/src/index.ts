@@ -19,5 +19,4 @@ export const Live = InfraLive.pipe(
 export const ServiceLive = Layer.mergeAll(
   SaveProjectLive,
   GetAllProjectsLive
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-) satisfies Layer.Layer<Services.SaveProject | Services.GetAllProjects, any, any>;
+) satisfies Layer.Layer<Services.SaveProject | Services.GetAllProjects, unknown, unknown>;
