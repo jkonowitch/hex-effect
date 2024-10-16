@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { UseCases } from '@projects-next/application';
+import { UseCases } from '@projects/application';
 import { Live } from './index.js';
 import { SaveProjectLive } from './service.js';
 

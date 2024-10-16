@@ -1,4 +1,4 @@
-import { Project, Task } from '@projects-next/domain';
+import { Project, Task } from '@projects/domain';
 import { Effect, Option } from 'effect';
 import { FindProjectById, GetAllProjects, SaveProject, SaveTask } from './services.js';
 import { IsolationLevel, withTXBoundary } from '@hex-effect/core';

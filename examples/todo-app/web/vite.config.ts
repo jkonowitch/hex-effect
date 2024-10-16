@@ -9,7 +9,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: ['@projects-next/infra'],
+      external: ['@projects/infra'],
       plugins: [
         resolve({
           // pass custom options to the resolve plugin

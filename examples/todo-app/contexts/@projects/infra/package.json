@@ -1,5 +1,5 @@
 {
-  "name": "@projects-next/infra",
+  "name": "@projects/infra",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -21,8 +21,8 @@
     }
   },
   "dependencies": {
-    "@projects-next/application": "workspace:*",
-    "@projects-next/domain": "workspace:*",
+    "@projects/application": "workspace:*",
+    "@projects/domain": "workspace:*",
     "@hex-effect/core": "workspace:*",
     "@hex-effect/infra-libsql-nats": "workspace:*"
   }

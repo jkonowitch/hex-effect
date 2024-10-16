@@ -2,7 +2,7 @@ import { UUIDGenerator } from '@hex-effect/core';
 import { Live as InfraLive, NatsConfig, LibsqlConfig } from '@hex-effect/infra-libsql-nats';
 import { Config, Layer } from 'effect';
 import { GetAllProjectsLive, SaveProjectLive } from './service.js';
-import type { Services } from '@projects-next/application';
+import type { Services } from '@projects/application';
 
 const ConfigLive = Layer.succeed(NatsConfig, {
   config: { servers: Config.string('NATS_SERVER') },

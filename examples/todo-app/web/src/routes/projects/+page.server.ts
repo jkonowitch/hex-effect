@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
-import { ServiceLive } from '@projects-next/infra';
-import { UseCases } from '@projects-next/application';
+import { ServiceLive } from '@projects/infra';
+import { UseCases } from '@projects/application';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ platform }) => {

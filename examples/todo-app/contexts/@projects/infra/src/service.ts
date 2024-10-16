@@ -3,9 +3,9 @@ import { isTagged } from 'effect/Predicate';
 import { SqlClient, SqlError } from '@effect/sql';
 import { InfrastructureError } from '@hex-effect/core';
 import { WriteStatement } from '@hex-effect/infra-libsql-nats';
-import { Services } from '@projects-next/application';
+import { Services } from '@projects/application';
 import { Schema } from '@effect/schema';
-import { Project } from '@projects-next/domain';
+import { Project } from '@projects/domain';
 
 const logAndMap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   pipe(

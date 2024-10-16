@@ -1,4 +1,4 @@
-import { Live } from '@projects-next/infra';
+import { Live } from '@projects/infra';
 import type { Handle } from '@sveltejs/kit';
 import { ManagedRuntime } from 'effect';
 

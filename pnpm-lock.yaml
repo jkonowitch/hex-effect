@@ -58,12 +58,12 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(@types/node@20.12.14)
 
-  examples/todo-app/contexts/@projects-next/application:
+  examples/todo-app/contexts/@projects/application:
     dependencies:
       '@hex-effect/core':
         specifier: workspace:*
         version: link:../../../../../packages/@hex-effect/core
-      '@projects-next/domain':
+      '@projects/domain':
         specifier: workspace:*
         version: link:../domain
     devDependencies:
@@ -74,7 +74,7 @@ importers:
         specifier: workspace:*
         version: link:../../../../../packages/@repo/typescript-config
 
-  examples/todo-app/contexts/@projects-next/domain:
+  examples/todo-app/contexts/@projects/domain:
     dependencies:
       '@hex-effect/core':
         specifier: workspace:*
@@ -87,7 +87,7 @@ importers:
         specifier: workspace:*
         version: link:../../../../../packages/@repo/typescript-config
 
-  examples/todo-app/contexts/@projects-next/infra:
+  examples/todo-app/contexts/@projects/infra:
     dependencies:
       '@hex-effect/core':
         specifier: workspace:*
@@ -95,10 +95,10 @@ importers:
       '@hex-effect/infra-libsql-nats':
         specifier: workspace:*
         version: link:../../../../../packages/@hex-effect/infra-libsql-nats
-      '@projects-next/application':
+      '@projects/application':
         specifier: workspace:*
         version: link:../application
-      '@projects-next/domain':
+      '@projects/domain':
         specifier: workspace:*
         version: link:../domain
     devDependencies:
@@ -111,15 +111,15 @@ importers:
 
   examples/todo-app/web:
     dependencies:
-      '@projects-next/application':
+      '@projects/application':
         specifier: workspace:*
-        version: link:../contexts/@projects-next/application
-      '@projects-next/domain':
+        version: link:../contexts/@projects/application
+      '@projects/domain':
         specifier: workspace:*
-        version: link:../contexts/@projects-next/domain
-      '@projects-next/infra':
+        version: link:../contexts/@projects/domain
+      '@projects/infra':
         specifier: workspace:*
-        version: link:../contexts/@projects-next/infra
+        version: link:../contexts/@projects/infra
       '@repo/ui':
         specifier: workspace:*
         version: link:../../../packages/@repo/ui

@@ -1,5 +1,5 @@
 import { Context, Effect, Option } from 'effect';
-import { Project, Task } from '@projects-next/domain';
+import { Project, Task } from '@projects/domain';
 import type { PersistenceError } from '@hex-effect/core';
 
 export class SaveProject extends Context.Tag('@projects/application/SaveProject')<

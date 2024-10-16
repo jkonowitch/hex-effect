@@ -1,5 +1,5 @@
 {
-  "name": "@projects-next/application",
+  "name": "@projects/application",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@hex-effect/core": "workspace:*",
-    "@projects-next/domain": "workspace:*"
+    "@projects/domain": "workspace:*"
   },
   "type": "module",
   "exports": {

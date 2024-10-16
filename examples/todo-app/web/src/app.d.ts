@@ -1,5 +1,5 @@
 import type { Layer, ManagedRuntime } from 'effect';
-import type { Live } from '@projects-next/infra';
+import type { Live } from '@projects/infra';
 
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
