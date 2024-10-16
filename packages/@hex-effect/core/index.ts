@@ -112,7 +112,11 @@ export class DataIntegrityError extends Data.TaggedError('@hex-effect/DataIntegr
 
 export class InfrastructureError extends Data.TaggedError('@hex-effect/InfrastructureError')<{
   cause: unknown;
-}> {}
+}> {
+  get message() {
+    return `${this.cause}`;
+  }
+}
 
 export type PersistenceError = DataIntegrityError | InfrastructureError;
 
