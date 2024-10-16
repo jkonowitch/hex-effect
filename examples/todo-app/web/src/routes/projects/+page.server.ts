@@ -1,11 +1,11 @@
-import type { PageServerLoad } from './$types';
 import { Effect } from 'effect';
-import { UseCases } from '@projects-next/application';
 import { ServiceLive } from '@projects-next/infra';
+import { UseCases } from '@projects-next/application';
+import type { PageServerLoad } from './$types';
 
 export const load = (async ({ platform }) => {
-  const projects = await Effect.runPromise(
-    UseCases.getAllProjects.pipe(Effect.provide(ServiceLive), Effect.provide(platform!.runtime))
+  const projects = await platform!.runtime.runPromise(
+    UseCases.getAllProjects.pipe(Effect.provide(ServiceLive))
   );
 
   return { projects: projects };
