@@ -105,7 +105,7 @@ export enum IsolationLevel {
   Batched = 'Batched'
 }
 
-export class TransactionError extends Data.TaggedError('@hex-effect/TransactionError')<{
+export class DataIntegrityError extends Data.TaggedError('@hex-effect/DataIntegrityError')<{
   cause: unknown;
 }> {}
 
@@ -118,7 +118,7 @@ export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   <E, R, A extends EncodableEventBase>(
     eff: Effect.Effect<ReadonlyArray<A>, E, R>,
     isolationLevel: IsolationLevel
-  ) => Effect.Effect<ReadonlyArray<A>, E | TransactionError | InfrastructureError, R>
+  ) => Effect.Effect<ReadonlyArray<A>, E | DataIntegrityError | InfrastructureError, R>
 >() {}
 
 export function withTXBoundary(level: IsolationLevel) {
@@ -126,7 +126,7 @@ export function withTXBoundary(level: IsolationLevel) {
     useCase: Effect.Effect<ReadonlyArray<A>, E, R>
   ): Effect.Effect<
     ReadonlyArray<A>,
-    E | TransactionError | InfrastructureError,
+    E | DataIntegrityError | InfrastructureError,
     WithTransaction | R
   > =>
     Effect.gen(function* () {

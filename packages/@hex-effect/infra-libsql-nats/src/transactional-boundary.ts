@@ -1,7 +1,7 @@
 import {
   InfrastructureError,
   IsolationLevel,
-  TransactionError,
+  DataIntegrityError,
   WithTransaction,
   type EncodableEventBase
 } from '@hex-effect/core';
@@ -36,10 +36,11 @@ export const WithTransactionLive = Layer.effect(
     ) => {
       const useCaseWithEventStorage = useCase.pipe(
         Effect.tap(save),
-        Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
+        // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
+        Effect.mapError((e) => (isTaggedError(e) ? new InfrastructureError({ cause: e }) : e))
       );
 
-      let program: Effect.Effect<ReadonlyArray<A>, E | TransactionError | InfrastructureError, R>;
+      let program: Effect.Effect<ReadonlyArray<A>, E | DataIntegrityError | InfrastructureError, R>;
 
       if (isolationLevel === IsolationLevel.Batched) {
         program = Effect.gen(function* () {
@@ -59,14 +60,16 @@ export const WithTransactionLive = Layer.effect(
                   };
                 })
               ),
-            catch: (e) => new TransactionError({ cause: e })
+            // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
+            catch: (e) => new DataIntegrityError({ cause: e })
           });
           return results;
         });
       } else if (isolationLevel === IsolationLevel.Serializable) {
         program = useCaseWithEventStorage.pipe(
           client.withTransaction,
-          Effect.mapError((e) => (isTaggedError(e) ? new TransactionError({ cause: e }) : e))
+          // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
+          Effect.mapError((e) => (isTaggedError(e) ? new DataIntegrityError({ cause: e }) : e))
         );
       } else {
         return Effect.dieMessage(`${isolationLevel} not supported`);
