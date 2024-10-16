@@ -1,6 +1,6 @@
 import { Project, Task } from '@projects-next/domain';
 import { Effect, Option } from 'effect';
-import { FindProjectById, SaveProject, SaveTask } from './services.js';
+import { FindProjectById, GetAllProjects, SaveProject, SaveTask } from './services.js';
 import { IsolationLevel, withTXBoundary } from '@hex-effect/core';
 import { ApplicationError, ErrorKinds, mapErrors } from './error.js';
 
@@ -24,3 +24,5 @@ export const addTaskToProject = (params: { projectId: string; description: strin
       return [event];
     }
   }).pipe(withTXBoundary(IsolationLevel.Batched), mapErrors);
+
+export const getAllProjects = Effect.serviceFunctions(GetAllProjects).getAll();

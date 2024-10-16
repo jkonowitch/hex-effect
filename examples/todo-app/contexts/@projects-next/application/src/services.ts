@@ -7,6 +7,13 @@ export class SaveProject extends Context.Tag('@projects/application/SaveProject'
   { save: (p: typeof Project.Model.Project.Type) => Effect.Effect<void, PersistenceError> }
 >() {}
 
+export class GetAllProjects extends Context.Tag('@projects/application/GetAllProjects')<
+  GetAllProjects,
+  {
+    getAll: () => Effect.Effect<ReadonlyArray<typeof Project.Model.Project.Type>, PersistenceError>;
+  }
+>() {}
+
 export class FindProjectById extends Context.Tag('@projects/application/FindProjectById')<
   FindProjectById,
   {
