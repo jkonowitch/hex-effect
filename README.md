@@ -58,6 +58,8 @@ This project was developed with heavy inspiration and reference to the following
 
 - <u>[Implementing Domain-Driven Design](https://www.amazon.com/Implementing-Domain-Driven-Design-Vaughn-Vernon/dp/0321834577)</u> by Vaughn Vernon
   - This was the main inspiration. I borrow heavily from the techniques introduced here. This is an absolutely brilliant book, and though it was published in 2013, it is still incredibly relevant. This book uses Java and OO, which I have adapted to Typescript / functional.
+- <u>[Domain Modeling Made Functional](https://pragprog.com/titles/swdddf/domain-modeling-made-functional/)</u> by Scott Wlaschin
+  - Helps to translate DDD concepts from the mainly OO sources to a functional style. Highly readable and concise.
 - <u>[Domain-Driven Design: Tackling Complexity in the Heart of Software](https://www.amazon.com/Domain-Driven-Design-Tackling-Complexity-Software/dp/0321125215/)</u> by Eric Evans
   - This is the book that describes DDD for the first time, and defined its foundational principles/approach.
 - <u>[Get Your Hands Dirty on Clean Architecture](https://www.amazon.com/Hands-Dirty-Clean-Architecture-hands/dp/1839211962)</u> by Tom Hombergs
