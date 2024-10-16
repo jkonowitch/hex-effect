@@ -14,9 +14,9 @@
     "test:unit": "vitest"
   },
   "dependencies": {
-    "@projects/application": "workspace:*",
-    "@projects/domain": "workspace:*",
-    "@projects/infra": "workspace:*",
+    "@projects-next/application": "workspace:*",
+    "@projects-next/domain": "workspace:*",
+    "@projects-next/infra": "workspace:*",
     "@repo/ui": "workspace:*"
   },
   "devDependencies": {

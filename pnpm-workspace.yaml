@@ -1,3 +1,4 @@
 packages:
-  - "examples/todo-app/**"
+  - "examples/todo-app/contexts/**"
+  - "examples/todo-app/web/"
   - "packages/**"
