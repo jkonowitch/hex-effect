@@ -11,8 +11,8 @@ const EventConsumerLive = Layer.map(NatsEventConsumer.Default, (ctx) => {
 });
 
 export { NatsConfig } from './messaging.js';
-export { LibsqlSdk, LibsqlConfig } from './sql.js';
+export { LibsqlSdk, LibsqlConfig, WriteStatement } from './sql.js';
 export const Live = EventPublisherDaemon.pipe(
   Layer.provideMerge(Layer.merge(EventConsumerLive, WithTransactionLive)),
   Layer.provideMerge(LibsqlSdk.Default)
-);
+).pipe(Layer.orDie);
