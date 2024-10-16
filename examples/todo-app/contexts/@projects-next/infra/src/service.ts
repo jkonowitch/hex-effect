@@ -20,14 +20,13 @@ const logAndMap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 export const SaveProjectLive = Layer.effect(
   Services.SaveProject,
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const write = yield* WriteStatement;
-
-    return {
-      save(p) {
-        return write(sql`INSERT INTO projects ${sql.insert(p)};`).pipe(logAndMap);
-      }
-    };
-  })
+  pipe(
+    Effect.zip(SqlClient.SqlClient, WriteStatement),
+    Effect.map(([sql, write]) => {
+      const service: typeof Services.SaveProject.Service = {
+        save: (p) => write(sql`INSERT INTO projects ${sql.insert(p)};`).pipe(logAndMap)
+      };
+      return service;
+    })
+  )
 );
