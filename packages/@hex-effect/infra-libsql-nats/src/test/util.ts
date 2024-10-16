@@ -2,8 +2,8 @@ import { Effect, Config, Context, Layer, Struct } from 'effect';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { Schema } from '@effect/schema';
-import { Model, SqlClient, SqlResolver } from '@effect/sql';
-import { DataIntegrityError, InfrastructureError, makeDomainEvent } from '@hex-effect/core';
+import { Model, SqlClient, SqlError, SqlResolver } from '@effect/sql';
+import { makeDomainEvent } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
 import type { ParseError } from '@effect/schema/ParseResult';
 import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
@@ -121,9 +121,7 @@ class PersonSQLModel extends Model.Class<PersonSQLModel>('PersonSQLModel')({
 
 class SavePerson extends Context.Tag('test/SavePerson')<
   SavePerson,
-  (
-    person: typeof PersonDomainModel.Type
-  ) => Effect.Effect<void, InfrastructureError | ParseError | DataIntegrityError>
+  (person: typeof PersonDomainModel.Type) => Effect.Effect<void, ParseError | SqlError.SqlError>
 >() {
   public static live = Layer.effect(
     this,

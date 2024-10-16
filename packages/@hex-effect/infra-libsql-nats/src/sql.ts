@@ -3,7 +3,6 @@ import { type Statement } from '@effect/sql';
 import type { SqlError } from '@effect/sql/SqlError';
 import { createClient, type Config as LibsqlClientConfig } from '@libsql/client';
 import { LibsqlClient } from '@effect/sql-libsql';
-import { DataIntegrityError, InfrastructureError } from '@hex-effect/core';
 
 class _WriteExecutor extends Context.Tag('@hex-effect/_WriteExecutor')<
   _WriteExecutor,
@@ -41,18 +40,13 @@ export const LibsqlClientLive = Layer.unwrapEffect(
 
 export class WriteStatement extends Context.Tag('WriteStatement')<
   WriteStatement,
-  (
-    stm: Statement.Statement<unknown>
-  ) => Effect.Effect<void, InfrastructureError | DataIntegrityError>
+  (stm: Statement.Statement<unknown>) => Effect.Effect<void, SqlError>
 >() {
   public static live = Layer.succeed(WriteStatement, (stm) =>
-    Effect.serviceOption(_WriteExecutor)
-      .pipe(
-        Effect.map((_) => (_._tag === 'None' ? identity : _.value)),
-        Effect.andThen((wr) => wr(stm))
-      )
-      // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
-      .pipe(Effect.mapError((e) => new InfrastructureError({ cause: e })))
+    Effect.serviceOption(_WriteExecutor).pipe(
+      Effect.map((_) => (_._tag === 'None' ? identity : _.value)),
+      Effect.andThen((wr) => wr(stm))
+    )
   );
 
   public static withExecutor = <A, E, R>(
