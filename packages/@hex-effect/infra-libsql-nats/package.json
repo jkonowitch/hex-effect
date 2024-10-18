@@ -1,6 +1,6 @@
 {
   "name": "@hex-effect/infra-libsql-nats",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "scripts": {
     "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
     "check": "tsc --noEmit",
@@ -9,7 +9,8 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "testcontainers": "^10.13.1"
+    "testcontainers": "^10.13.1",
+    "nanoid": "^5.0.7"
   },
   "files": [
     "bin/"
@@ -22,13 +23,12 @@
     "effect": ">=3.9",
     "@effect/sql": ">=0.16.1",
     "@effect/sql-libsql": ">=0.4.1",
-    "@effect/schema": ">=0.75.0"
+    "@effect/schema": ">=0.75.0",
+    "@libsql/client": ">=0.14.0"
   },
   "dependencies": {
     "@hex-effect/core": "workspace:*",
-    "@libsql/client": "~0.14.0",
     "@opentelemetry/semantic-conventions": "^1.27.0",
-    "nanoid": "^5.0.7",
     "@nats-io/transport-node": "^3.0.0-12",
     "@nats-io/jetstream": "^3.0.0-10"
   },
