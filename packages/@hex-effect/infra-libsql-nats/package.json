@@ -1,6 +1,6 @@
 {
   "name": "@hex-effect/infra-libsql-nats",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "scripts": {
     "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
     "check": "tsc --noEmit",
@@ -13,7 +13,8 @@
     "nanoid": "^5.0.7"
   },
   "files": [
-    "bin/"
+    "bin/",
+    "dist/"
   ],
   "bin": {
     "geni": "./bin/geni-linux-amd64"
