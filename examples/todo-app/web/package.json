@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "npm run test:integration && npm run test:unit",
+    "test": "vitest run",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "eslint .",
@@ -16,23 +16,25 @@
   "dependencies": {
     "@projects/application": "workspace:*",
     "@projects/domain": "workspace:*",
-    "@projects/infra": "workspace:*",
-    "@repo/ui": "workspace:*"
+    "@projects/infra": "workspace:*"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@rollup/plugin-node-resolve": "^15.2.3",
-    "@sveltejs/kit": "^2.7.1",
-    "@sveltejs/vite-plugin-svelte": "^3.1.2",
-    "@sveltejs/adapter-node": "^5.2.7",
-    "@typescript-eslint/eslint-plugin": "^7.1.0",
-    "@typescript-eslint/parser": "^7.1.0",
-    "prettier": "^3.2.5",
-    "prettier-plugin-svelte": "^3.2.2",
-    "svelte": "^4.2.12",
-    "svelte-check": "^3.6.6",
-    "tslib": "^2.6.2",
-    "vite": "^5.1.4",
-    "vitest": "^1.3.1"
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/kit": "^2.55.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.15.2",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "prettier-plugin-svelte": "^3.5.1",
+    "svelte": "^5.54.0",
+    "svelte-check": "^4.4.5",
+    "svelte-eslint-parser": "^1.6.0",
+    "tslib": "^2.8.1",
+    "vite": "^8.0.1",
+    "vitest": "^4.1.0"
   }
 }

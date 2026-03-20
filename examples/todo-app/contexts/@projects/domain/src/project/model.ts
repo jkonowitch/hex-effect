@@ -1,4 +1,4 @@
-import { Schema } from '@effect/schema';
+import { Schema } from 'effect';
 import { makeDomainEvent } from '@hex-effect/core';
 import { ContextName } from '../shared.js';
 

@@ -1,6 +1,4 @@
-import { Schema } from '@effect/schema';
-import { Serializable } from '@effect/schema';
-import type { Struct } from '@effect/schema/Schema';
+import * as Schema from 'effect/Schema';
 import { Clock, Context, Data, Effect } from 'effect';
 import { isObject } from 'effect/Predicate';
 import { nanoid } from 'nanoid';
@@ -15,15 +13,14 @@ export const EventBaseSchema = Schema.Struct({
 type DomainEventTag = { __type: 'DomainEvent' };
 
 export type EncodableEventBase = typeof EventBaseSchema.Type & {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly [Serializable.symbol]: Schema.Schema<any, any, any>;
+  readonly [Schema.symbolSerializable]: Schema.Schema.AnyNoContext;
 } & DomainEventTag;
 
-export type Encodable<F extends Struct.Fields> = Schema.Struct<F>['Type'] & {
-  readonly [Serializable.symbol]: Schema.Struct<F>;
+export type Encodable<F extends Schema.Struct.Fields> = Schema.Struct<F>['Type'] & {
+  readonly [Schema.symbolSerializable]: Schema.Struct<F>;
 } & DomainEventTag;
 
-export type EventSchemas<F extends Struct.Fields> = {
+export type EventSchemas<F extends Schema.Struct.Fields> = {
   schema: Schema.Struct<F>;
   metadata: Pick<typeof EventBaseSchema.Type, '_context' | '_tag'>;
   _tag: 'EventSchema';
@@ -60,11 +57,11 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
             messageId: uuid,
             occurredOn: date
           }),
-          get [Serializable.symbol]() {
+          get [Schema.symbolSerializable]() {
             return schema;
           },
           __type: 'DomainEvent'
-        } as const;
+        } as unknown as Readonly<Encodable<typeof schema.fields>>;
       }),
     metadata,
     _tag: 'EventSchema'
@@ -80,8 +77,7 @@ export const makeDomainEvent = <T extends string, C extends string, F extends Sc
 export class EventConsumer extends Context.Tag('@hex-effect/EventConsumer')<
   EventConsumer,
   {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    register<S extends EventSchemas<any>[], Err, Req>(
+    register<S extends EventSchemas<Schema.Struct.Fields>[], Err, Req>(
       eventSchemas: S,
       handler: (e: S[number]['schema']['Type']) => Effect.Effect<void, Err, Req>,
       config: { $durableName: string }
@@ -121,7 +117,7 @@ export class InfrastructureError extends Data.TaggedError('@hex-effect/Infrastru
 export type PersistenceError = DataIntegrityError | InfrastructureError;
 
 export const isPersistenceError = (a: unknown): a is PersistenceError =>
-  isObject(a) && (a instanceof DataIntegrityError || a instanceof DataIntegrityError);
+  isObject(a) && (a instanceof DataIntegrityError || a instanceof InfrastructureError);
 
 export class WithTransaction extends Context.Tag('@hex-effect/WithTransaction')<
   WithTransaction,
@@ -135,9 +131,5 @@ export function withTXBoundary(level: IsolationLevel) {
   return <E, R, A extends EncodableEventBase>(
     useCase: Effect.Effect<ReadonlyArray<A>, E, R>
   ): Effect.Effect<ReadonlyArray<A>, E | PersistenceError, WithTransaction | R> =>
-    Effect.gen(function* () {
-      const withTx = yield* WithTransaction;
-      const events = yield* withTx(useCase, level);
-      return events;
-    });
+    Effect.flatMap(WithTransaction, (withTx) => withTx(useCase, level));
 }

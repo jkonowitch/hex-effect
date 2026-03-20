@@ -1,11 +1,15 @@
 import { SqlClient } from '@effect/sql';
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Layer, identity, Stream, Fiber, Struct, Array } from 'effect';
-import { Schema } from '@effect/schema';
+import { Effect, Layer, identity, Stream, Fiber, Struct, Array, Schema } from 'effect';
 import { IsolationLevel, UUIDGenerator, withTXBoundary } from '@hex-effect/core';
-import { GetUnpublishedEvents, MarkAsPublished, SaveEvents } from '../event-store.js';
+import {
+  GetUnpublishedEvents,
+  MarkAsPublished,
+  SaveEvents,
+  UseCaseCommit
+} from '@hex-effect/infra-nats';
 import { LibsqlSdk } from '../sql.js';
-import { UseCaseCommit, WithTransactionLive } from '../transactional-boundary.js';
+import { WithTransactionLive } from '../transactional-boundary.js';
 import { addPerson, LibsqlContainer, Migrations, PersonCreatedEvent, PersonId } from './util.js';
 
 const TestLive = Migrations.pipe(

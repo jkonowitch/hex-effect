@@ -1,0 +1,29 @@
+{
+  "name": "@badges/infra",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist"
+  },
+  "devDependencies": {},
+  "type": "module",
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "default": {
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@badges/application": "workspace:*",
+    "@badges/domain": "workspace:*",
+    "@projects/domain": "workspace:*",
+    "@hex-effect/core": "workspace:*",
+    "@hex-effect/infra-libsql-nats": "workspace:*",
+    "@hex-effect/infra-nats": "workspace:*"
+  }
+}

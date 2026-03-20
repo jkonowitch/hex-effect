@@ -1,0 +1,66 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Todo App (server)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/examples/todo-app/web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev", "--", "--host"],
+      "env": {
+        "DATABASE_URL": "http://libsql:8080",
+        "NATS_SERVER": "nats://nats:4222",
+        "NODE_OPTIONS": "--inspect=0"
+      },
+      "preLaunchTask": "docker-compose: up",
+      "postDebugTask": "docker-compose: down",
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Todo App (server, PostgreSQL)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/examples/todo-app/web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev", "--", "--host"],
+      "env": {
+        "DATABASE_URL": "postgresql://hexeffect:hexeffect@postgres:5432/hexeffect",
+        "NATS_SERVER": "nats://nats:4222",
+        "DB_PROVIDER": "pg",
+        "NODE_OPTIONS": "--inspect=0"
+      },
+      "preLaunchTask": "docker-compose: up (pg)",
+      "postDebugTask": "docker-compose: down (pg)",
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Todo App (browser)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3001",
+      "webRoot": "${workspaceFolder}/examples/todo-app/web",
+      "sourceMapPathOverrides": {
+        "/@fs/*": "/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Todo App (full stack)",
+      "configurations": ["Todo App (server)", "Todo App (browser)"],
+      "stopAll": true
+    },
+    {
+      "name": "Todo App (full stack, PostgreSQL)",
+      "configurations": ["Todo App (server, PostgreSQL)", "Todo App (browser)"],
+      "stopAll": true
+    }
+  ]
+}

@@ -1,8 +1,7 @@
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { UUIDGenerator } from '@hex-effect/core';
 import { Task, TaskAddedEvent, TaskCompletedEvent } from './model.js';
 import type { Project } from '../project/model.js';
-import { Schema } from '@effect/schema';
 
 export const addTaskToProject = (project: typeof Project.Type, description: string) =>
   Effect.gen(function* () {

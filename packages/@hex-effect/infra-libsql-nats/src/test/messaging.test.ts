@@ -1,13 +1,33 @@
 import { describe, expect, layer } from '@effect/vitest';
-import { Effect, Config, Layer, Stream, Fiber, Chunk, Deferred, Struct } from 'effect';
-import { makeDomainEvent, UUIDGenerator } from '@hex-effect/core';
-import { Schema } from '@effect/schema';
-import { NatsClient, NatsConfig, NatsEventConsumer, PublishEvent } from '../messaging.js';
-import { UnpublishedEventRecord } from '../event-store.js';
+import {
+  Effect,
+  Config,
+  Layer,
+  Stream,
+  Fiber,
+  Chunk,
+  Deferred,
+  Struct,
+  Schema,
+  Queue
+} from 'effect';
+import { EventBaseSchema, makeDomainEvent, UUIDGenerator } from '@hex-effect/core';
+import {
+  NatsClient,
+  NatsConfig,
+  NatsEventConsumer,
+  PublishEvent,
+  UnpublishedEventRecord
+} from '@hex-effect/infra-nats';
 import { NatsContainer } from './util.js';
 
 const SomeEvent = makeDomainEvent(
   { _tag: 'SomeEvent', _context: 'SomeContext' },
+  { name: Schema.String }
+);
+
+const AnotherEvent = makeDomainEvent(
+  { _tag: 'AnotherEvent', _context: 'SomeContext' },
   { name: Schema.String }
 );
 
@@ -18,13 +38,8 @@ const TestLive = PublishEvent.Default.pipe(
 
 describe('Messaging', () => {
   layer(TestLive)((it) => {
-    const publish = (e: Effect.Effect.Success<ReturnType<(typeof SomeEvent)['make']>>) =>
-      PublishEvent.publish(
-        UnpublishedEventRecord.make({
-          ...e,
-          payload: JSON.stringify(e)
-        })
-      );
+    const publish = (e: typeof EventBaseSchema.Type) =>
+      PublishEvent.publish(UnpublishedEventRecord.make({ ...e, payload: JSON.stringify(e) }));
 
     it.scoped('it can publish', () =>
       Effect.gen(function* () {
@@ -65,6 +80,23 @@ describe('Messaging', () => {
         yield* publish(event);
         const received = yield* Deferred.await(deferred);
         expect(event).toMatchObject(received);
+      }).pipe(Effect.provide(NatsEventConsumer.Default))
+    );
+
+    it.effect('EventConsumer processes multiple events', () =>
+      Effect.gen(function* () {
+        const queue = yield* Queue.unbounded<typeof AnotherEvent.schema.Type>();
+        yield* NatsEventConsumer.use((c) =>
+          c.register([AnotherEvent], (e) => Queue.offer(queue, e), { $durableName: 'shmee-multi' })
+        );
+        const event1 = yield* AnotherEvent.make({ name: 'first' });
+        const event2 = yield* AnotherEvent.make({ name: 'second' });
+        yield* publish(event1);
+        yield* publish(event2);
+        const received1 = yield* Queue.take(queue);
+        const received2 = yield* Queue.take(queue);
+        expect(event1).toMatchObject(received1);
+        expect(event2).toMatchObject(received2);
       }).pipe(Effect.provide(NatsEventConsumer.Default))
     );
 

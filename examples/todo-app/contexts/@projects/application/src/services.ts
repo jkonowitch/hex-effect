@@ -29,3 +29,31 @@ export class SaveTask extends Context.Tag('@projects/application/SaveTask')<
     save: (p: typeof Task.Model.Task.Type) => Effect.Effect<void, PersistenceError>;
   }
 >() {}
+
+export class DeleteTask extends Context.Tag('@projects/application/DeleteTask')<
+  DeleteTask,
+  { delete: (id: typeof Task.Model.TaskId.Type) => Effect.Effect<void, PersistenceError> }
+>() {}
+
+export class GetTasksByProjectId extends Context.Tag('@projects/application/GetTasksByProjectId')<
+  GetTasksByProjectId,
+  {
+    getByProjectId: (
+      projectId: typeof Project.Model.ProjectId.Type
+    ) => Effect.Effect<ReadonlyArray<typeof Task.Model.Task.Type>, PersistenceError>;
+  }
+>() {}
+
+export class FindTaskById extends Context.Tag('@projects/application/FindTaskById')<
+  FindTaskById,
+  {
+    findById: (
+      id: typeof Task.Model.TaskId.Type
+    ) => Effect.Effect<Option.Option<typeof Task.Model.Task.Type>, PersistenceError>;
+  }
+>() {}
+
+export class UpdateTask extends Context.Tag('@projects/application/UpdateTask')<
+  UpdateTask,
+  { update: (t: typeof Task.Model.Task.Type) => Effect.Effect<void, PersistenceError> }
+>() {}

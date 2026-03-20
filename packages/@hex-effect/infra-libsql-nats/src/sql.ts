@@ -30,9 +30,9 @@ export const LibsqlClientLive = Layer.unwrapEffect(
   LibsqlSdk.pipe(
     Effect.andThen(({ sdk }) =>
       LibsqlClient.layer({
-        liveClient: Config.succeed(sdk),
-        transformQueryNames: Config.succeed(String.camelToSnake),
-        transformResultNames: Config.succeed(String.snakeToCamel)
+        liveClient: sdk,
+        transformQueryNames: String.camelToSnake,
+        transformResultNames: String.snakeToCamel
       })
     )
   )

@@ -1,6 +1,25 @@
+configs:
+  pgadmin-servers:
+    content: |
+      {
+        "Servers": {
+          "1": {
+            "Name": "Local Postgres",
+            "Group": "Servers",
+            "Host": "postgres",
+            "Port": 5432,
+            "MaintenanceDB": "hexeffect",
+            "Username": "hexeffect",
+            "PassFile": "/config/pgpass"
+          }
+        }
+      }
+  pgadmin-pgpass:
+    content: |
+      postgres:5432:*:hexeffect:hexeffect
 services:
   libsql:
-    image: ghcr.io/tursodatabase/libsql-server:main
+    image: ghcr.io/tursodatabase/libsql-server:latest
     ports:
       - '8080:8080'
     environment:
@@ -8,6 +27,31 @@ services:
     command: ['sqld', '--no-welcome', '--http-listen-addr', '0.0.0.0:8080']
     volumes:
       - libsql-data:/var/lib/sqld
+  studio:
+    build:
+      context: https://github.com/outerbase/studio.git
+      dockerfile_inline: |
+        FROM node:20-alpine AS builder
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm install
+        COPY . .
+        ARG NEXT_PUBLIC_OB_API=http://localhost:1
+        ENV NEXT_PUBLIC_OB_API=$NEXT_PUBLIC_OB_API
+        RUN npm run build
+        FROM node:20-alpine
+
+        WORKDIR /app
+        COPY --from=builder /app/.next/standalone ./
+        COPY --from=builder /app/public ./public
+        COPY --from=builder /app/.next/static ./.next/static
+        CMD ["node", "server.js"]
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: 'http://libsql:8080'
+    depends_on:
+      - libsql
   nats:
     image: nats
     ports:
@@ -15,7 +59,48 @@ services:
     command: '-js -sd /data'
     volumes:
       - nats-data:/data
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: hexeffect
+      POSTGRES_USER: hexeffect
+      POSTGRES_PASSWORD: hexeffect
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    profiles:
+      - pg
+  pgadmin:
+    image: dpage/pgadmin4:9.13
+    ports:
+      - 5050:80
+    configs:
+      - source: pgadmin-pgpass
+        target: /config/pgpass
+        uid: "5050"
+        gid: "5050"
+        mode: 0400
+      - source: pgadmin-servers
+        target: /pgadmin4/servers.json
+        mode: 0444
+    environment:
+      # Required by pgAdmin
+      PGADMIN_DEFAULT_EMAIL: demo@example.com
+      PGADMIN_DEFAULT_PASSWORD: secret
+
+      # Don't require the user to login
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+
+      # Don't require a "master" password after logging in
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
 
 volumes:
   libsql-data:
   nats-data:
+  pg-data:
+
+networks:
+  default:
+    name: devcontainer
+    external: true

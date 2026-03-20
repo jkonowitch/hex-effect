@@ -2,3 +2,6 @@ packages:
   - "examples/todo-app/contexts/**"
   - "examples/todo-app/web/"
   - "packages/**"
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true

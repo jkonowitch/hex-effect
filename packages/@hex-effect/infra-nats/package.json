@@ -1,0 +1,28 @@
+{
+  "name": "@hex-effect/infra-nats",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "rm -rf dist && bun build ./src/index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
+    "check": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@effect/sql": ">=0.51.0",
+    "effect": ">=3.21"
+  },
+  "dependencies": {
+    "@hex-effect/core": "workspace:*",
+    "@nats-io/jetstream": "^3.3.1",
+    "@nats-io/transport-node": "^3.3.1"
+  },
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "default": {
+      "default": "./src/index.ts"
+    }
+  }
+}

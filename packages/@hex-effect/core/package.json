@@ -3,19 +3,15 @@
   "version": "0.2.1",
   "scripts": {
     "build": "rm -rf dist && bun build ./index.ts --packages 'external' --outdir ./dist --target node --sourcemap='linked' && tsc --emitDeclarationOnly --outDir ./dist",
-    "check": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*"
+    "check": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "type": "module",
   "dependencies": {
-    "nanoid": "~5.0.7"
+    "nanoid": "~5.1.7"
   },
   "peerDependencies": {
-    "effect": ">=3.9",
-    "@effect/schema": ">=0.75.0"
+    "effect": ">=3.21"
   },
   "exports": {
     "node": {

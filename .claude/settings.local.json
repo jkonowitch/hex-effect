@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const t = require\\(''/workspace/node_modules/.pnpm/@nats-io+transport-node@3.3.1/node_modules/@nats-io/transport-node''\\); const e = new t.NoRespondersError\\(\\); console.log\\(Object.keys\\(Object.getPrototypeOf\\(e\\)\\)\\)\")",
+      "Bash(node -e \"const js = require\\(''/workspace/node_modules/.pnpm/@nats-io+jetstream@3.3.1/node_modules/@nats-io/jetstream''\\); console.log\\(Object.keys\\(js\\).filter\\(k => /error|code|404/i.test\\(k\\)\\)\\)\")",
+      "Bash(node -e \"const js = require\\(''/workspace/node_modules/.pnpm/@nats-io+jetstream@3.3.1/node_modules/@nats-io/jetstream/lib/cjs/index.js''\\); console.log\\(Object.keys\\(js\\).filter\\(k => /error|code|404|NotFound/i.test\\(k\\)\\)\\)\")"
+    ]
+  }
+}

@@ -1,13 +1,12 @@
-import { Effect, Config, Context, Layer, Struct } from 'effect';
+import { Effect, Config, Context, Layer, Struct, Schema } from 'effect';
+import type { ParseError } from 'effect/ParseResult';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { LibsqlClient } from '@effect/sql-libsql';
-import { Schema } from '@effect/schema';
 import { Model, SqlClient, SqlError, SqlResolver } from '@effect/sql';
 import { makeDomainEvent } from '@hex-effect/core';
 import { nanoid } from 'nanoid';
-import type { ParseError } from '@effect/schema/ParseResult';
 import { LibsqlConfig, LibsqlSdk, WriteStatement } from '../sql.js';
-import { NatsClient, NatsConfig } from '../messaging.js';
+import { NatsClient, NatsConfig } from '@hex-effect/infra-nats';
 
 export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
   LibsqlContainer,
@@ -21,6 +20,7 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
           .withExposedPorts(8080)
           .withEnvironment({ SQLD_NODE: 'primary' })
           .withCommand(['sqld', '--no-welcome', '--http-listen-addr', '0.0.0.0:8080'])
+          .withWaitStrategy(Wait.forListeningPorts())
           .start()
       ),
       (container) => Effect.promise(() => container.stop())
@@ -32,7 +32,7 @@ export class LibsqlContainer extends Context.Tag('test/LibsqlContainer')<
     LibsqlContainer.pipe(
       Effect.andThen((container) => ({
         config: {
-          url: Config.succeed(`http://localhost:${container.getMappedPort(8080)}`)
+          url: Config.succeed(`http://${container.getHost()}:${container.getMappedPort(8080)}`)
         }
       }))
     )
@@ -64,7 +64,9 @@ export class NatsContainer extends Context.Tag('test/NatsContainer')<
           const container = yield* NatsContainer;
           return Layer.succeed(NatsConfig, {
             config: {
-              servers: Config.succeed(`nats://localhost:${container.getMappedPort(4222)}`)
+              servers: Config.succeed(
+                `nats://${container.getHost()}:${container.getMappedPort(4222)}`
+              )
             },
             appNamespace: Config.succeed('KRALF')
           });

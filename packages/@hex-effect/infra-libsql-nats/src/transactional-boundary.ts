@@ -5,22 +5,32 @@ import {
   WithTransaction,
   type EncodableEventBase
 } from '@hex-effect/core';
-import { Context, Effect, Layer, PubSub, Ref } from 'effect';
+import { Effect, Layer, Match, Ref } from 'effect';
 import { type Statement } from '@effect/sql';
 import { LibsqlClient } from '@effect/sql-libsql';
 import { type InValue } from '@libsql/client';
 import { isTagged } from 'effect/Predicate';
 import { LibsqlClientLive, LibsqlSdk, WriteStatement } from './sql.js';
-import { EventStoreLive, SaveEvents } from './event-store.js';
+import { EventStoreLive, SaveEvents, UseCaseCommit } from '@hex-effect/infra-nats';
 
 const isTaggedError = (e: unknown) => isTagged(e, 'SqlError') || isTagged(e, 'ParseError');
 
-export class UseCaseCommit extends Context.Tag('@hex-effect/UseCaseCommit')<
-  UseCaseCommit,
-  PubSub.PubSub<void>
->() {
-  public static live = Layer.effect(UseCaseCommit, PubSub.sliding<void>(10));
-}
+// LibsqlError.code starts with 'SQLITE_CONSTRAINT' for unique/fk/check/notnull violations.
+// Everything else (network, malformed SQL, I/O) is an infrastructure problem.
+const isConstraintViolation = (e: unknown): boolean => {
+  const raw = isTagged(e, 'SqlError') ? (e as unknown as { cause: unknown }).cause : e;
+  return (
+    raw instanceof Error &&
+    'code' in raw &&
+    typeof (raw as Error & { code: unknown }).code === 'string' &&
+    (raw as Error & { code: string }).code.startsWith('SQLITE_CONSTRAINT')
+  );
+};
+
+const classifySqlError = (e: unknown): DataIntegrityError | InfrastructureError =>
+  isConstraintViolation(e)
+    ? new DataIntegrityError({ cause: e })
+    : new InfrastructureError({ cause: e });
 
 export const WithTransactionLive = Layer.effect(
   WithTransaction,
@@ -36,46 +46,41 @@ export const WithTransactionLive = Layer.effect(
     ) => {
       const useCaseWithEventStorage = useCase.pipe(
         Effect.tap(save),
-        // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
-        Effect.mapError((e) => (isTaggedError(e) ? new InfrastructureError({ cause: e }) : e))
+        Effect.mapError((e) => (isTaggedError(e) ? classifySqlError(e) : e))
       );
 
-      let program: Effect.Effect<ReadonlyArray<A>, E | DataIntegrityError | InfrastructureError, R>;
-
-      if (isolationLevel === IsolationLevel.Batched) {
-        program = Effect.gen(function* () {
-          const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
-          const results = yield* WriteStatement.withExecutor(useCaseWithEventStorage, (stm) =>
-            Ref.update(ref, (a) => [...a, stm])
-          );
-          const writes = yield* Ref.get(ref);
-          yield* Effect.tryPromise({
-            try: () =>
-              sdk.batch(
-                writes.map((w) => {
-                  const [sql, args] = w.compile();
-                  return {
-                    args: args as Array<InValue>,
-                    sql: sql
-                  };
-                })
-              ),
-            // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
-            catch: (e) => new DataIntegrityError({ cause: e })
-          });
-          return results;
-        });
-      } else if (isolationLevel === IsolationLevel.Serializable) {
-        program = useCaseWithEventStorage.pipe(
-          client.withTransaction,
-          // TODO: distinguish between data integrity errors, and other internal/external InfraErrors (like malformed sql, server comms issues, etc.)
-          Effect.mapError((e) => (isTaggedError(e) ? new DataIntegrityError({ cause: e }) : e))
+      const batched = Effect.gen(function* () {
+        const ref = yield* Ref.make<Statement.Statement<unknown>[]>([]);
+        const results = yield* WriteStatement.withExecutor(useCaseWithEventStorage, (stm) =>
+          Ref.update(ref, (a) => [...a, stm])
         );
-      } else {
-        return Effect.dieMessage(`${isolationLevel} not supported`);
-      }
+        const writes = yield* Ref.get(ref);
+        yield* Effect.tryPromise(() =>
+          sdk.batch(
+            writes.map((w) => {
+              const [sql, args] = w.compile();
+              return { args: args as Array<InValue>, sql };
+            })
+          )
+        ).pipe(
+          Effect.mapError((e) => classifySqlError(e.error)),
+          Effect.when(() => writes.length > 0)
+        );
+        return results;
+      });
 
-      return program.pipe(Effect.tap(() => pub.publish()));
+      const serializable = useCaseWithEventStorage.pipe(
+        client.withTransaction,
+        Effect.mapError((e) => (isTaggedError(e) ? classifySqlError(e) : e))
+      );
+
+      return Match.value(isolationLevel)
+        .pipe(
+          Match.when(IsolationLevel.Batched, () => batched),
+          Match.when(IsolationLevel.Serializable, () => serializable),
+          Match.orElse(() => Effect.dieMessage(`${isolationLevel} not supported`))
+        )
+        .pipe(Effect.tap(() => pub.publish()));
     };
   })
 ).pipe(

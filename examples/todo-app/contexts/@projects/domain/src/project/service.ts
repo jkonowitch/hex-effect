@@ -1,7 +1,6 @@
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { Project, ProjectCreatedEvent } from './model.js';
 import { UUIDGenerator } from '@hex-effect/core';
-import { Schema } from '@effect/schema';
 
 export const createProject = (title: string) =>
   Effect.gen(function* () {

@@ -15,7 +15,7 @@
 </form>
 
 <ul>
-  {#each data.projects as project}
+  {#each data.projects as project (project.id)}
     <li><a href={`/projects/${project.id}`}>{project.title}</a></li>
   {/each}
 </ul>

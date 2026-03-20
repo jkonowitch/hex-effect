@@ -1,4 +1,4 @@
-import { Schema } from '@effect/schema';
+import { Schema } from 'effect';
 import { ProjectId } from '../project/model.js';
 import { makeDomainEvent } from '@hex-effect/core';
 import { ContextName } from '../shared.js';
@@ -22,5 +22,10 @@ export const TaskAddedEvent = makeDomainEvent(
 
 export const TaskCompletedEvent = makeDomainEvent(
   { _context: ContextName, _tag: 'TaskCompletedEvent' },
+  { taskId: TaskId }
+);
+
+export const TaskRemovedEvent = makeDomainEvent(
+  { _context: ContextName, _tag: 'TaskRemovedEvent' },
   { taskId: TaskId }
 );
